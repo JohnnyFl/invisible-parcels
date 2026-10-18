@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"novapost/backend/auth"
 	"novapost/backend/config"
 	"novapost/backend/emuclient"
 	"novapost/backend/sim"
@@ -123,33 +124,57 @@ func TestLocations(t *testing.T) {
 	}
 }
 
-func jsonReq(method, path, body string) *http.Request {
+func sessionCookie(d Deps, role, branch string) *http.Cookie {
+	return &http.Cookie{Name: auth.CookieName, Value: auth.Encode(auth.Session{Role: role, BranchID: branch, ExpiresAt: time.Now().Add(time.Hour)}, d.Cfg.AppSecret)}
+}
+
+func adminCookie(d Deps) *http.Cookie { return sessionCookie(d, "admin", "") }
+
+func operatorCookie(d Deps, branch string) *http.Cookie { return sessionCookie(d, "operator", branch) }
+
+func jsonReq(method, path, body string, cookies ...*http.Cookie) *http.Request {
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
 	return req
+}
+
+func TestSimAPI_RequiresAdmin(t *testing.T) {
+	d := testDeps(t)
+	e := NewServer(d)
+	if rec := do(e, jsonReq("GET", "/api/sim/clock", "")); rec.Code != 401 {
+		t.Fatal(rec.Code)
+	}
+	if rec := do(e, jsonReq("GET", "/api/sim/clock", "", operatorCookie(d, "branch-kyiv-12"))); rec.Code != 403 {
+		t.Fatal(rec.Code)
+	}
 }
 
 func TestSimAPI_ClockAndMode(t *testing.T) {
 	d := testDeps(t)
 	e := NewServer(d)
-	if rec := do(e, jsonReq("POST", "/api/sim/clock", `{"jumpTo":"2026-10-18T10:00:00Z","speed":0}`)); rec.Code != 200 {
+	a := adminCookie(d)
+	if rec := do(e, jsonReq("POST", "/api/sim/clock", `{"jumpTo":"2026-10-18T10:00:00Z","speed":0}`, a)); rec.Code != 200 {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
 	}
-	if rec := do(e, jsonReq("POST", "/api/sim/mode", `{"mode":"as_is"}`)); rec.Code != 200 {
+	if rec := do(e, jsonReq("POST", "/api/sim/mode", `{"mode":"as_is"}`, a)); rec.Code != 200 {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
 	}
-	rec := do(e, httptest.NewRequest("GET", "/api/sim/clock", nil))
+	rec := do(e, jsonReq("GET", "/api/sim/clock", "", a))
 	if !strings.Contains(rec.Body.String(), `"virtualNow":"2026-10-18T10:00:00Z"`) || !strings.Contains(rec.Body.String(), `"mode":"as_is"`) {
 		t.Fatal(rec.Body.String())
 	}
-	if rec := do(e, jsonReq("POST", "/api/sim/mode", `{"mode":"bogus"}`)); rec.Code != 400 {
+	if rec := do(e, jsonReq("POST", "/api/sim/mode", `{"mode":"bogus"}`, a)); rec.Code != 400 {
 		t.Fatal(rec.Code)
 	}
 }
 
 func TestSimAPI_ScenarioWhenEmulatorDownIs502(t *testing.T) {
-	e := NewServer(testDepsEmu(t, "http://127.0.0.1:1"))
-	if rec := do(e, jsonReq("POST", "/api/sim/scenarios/2", ``)); rec.Code != 502 {
+	d := testDepsEmu(t, "http://127.0.0.1:1")
+	e := NewServer(d)
+	if rec := do(e, jsonReq("POST", "/api/sim/scenarios/2", ``, adminCookie(d))); rec.Code != 502 {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
 	}
 }
@@ -158,7 +183,7 @@ func TestSimAPI_ScenarioResetsDataAndStartsClock(t *testing.T) {
 	d := testDeps(t)
 	e := NewServer(d)
 	ingest(t, e, "ingest", scenario2Events())
-	if rec := do(e, jsonReq("POST", "/api/sim/scenarios/2", ``)); rec.Code != 200 {
+	if rec := do(e, jsonReq("POST", "/api/sim/scenarios/2", ``, adminCookie(d))); rec.Code != 200 {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
 	}
 	if p, _, _ := d.Store.Parcel(context.Background(), contract.TTN(1)); p != nil {

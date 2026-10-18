@@ -6,6 +6,7 @@ import (
 
 	"github.com/labstack/echo/v5"
 
+	"novapost/backend/auth"
 	"novapost/backend/config"
 	"novapost/backend/emuclient"
 	"novapost/backend/sim"
@@ -26,7 +27,12 @@ func NewServer(d Deps) *echo.Echo {
 	e.GET("/api/locations", func(c *echo.Context) error { return c.JSON(http.StatusOK, contract.Locations) })
 	e.POST("/api/ingest/events", ingestHandler(d))
 
-	sg := e.Group("/api/sim")
+	login, logout, me := auth.Handlers(d.Cfg)
+	e.POST("/api/login", login)
+	e.POST("/api/logout", logout)
+	e.GET("/api/me", me)
+
+	sg := e.Group("/api/sim", auth.Middleware(d.Cfg.AppSecret, "admin"))
 	sg.GET("/clock", simClock(d))
 	sg.POST("/clock", simSetClock(d))
 	sg.POST("/mode", simSetMode(d))
