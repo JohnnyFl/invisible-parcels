@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Header } from "../components/Header";
 import { LevelBadge, problemText } from "../components/LevelBadge";
 import { TrackCard } from "../components/TrackCard";
-import { api, type ClockState, type Mode, type Split } from "../lib/api";
+import { api, formatTime, type ClockState, type Mode, type Split } from "../lib/api";
 import { requireRole } from "../lib/guard";
 import { useLocationName, useVirtualNow } from "../lib/queries";
 import { useInvalidateStream } from "../lib/useInvalidateStream";
@@ -36,6 +36,7 @@ function Sim() {
   const name = useLocationName();
   const { now, clock } = useVirtualNow();
   const [ttn, setTtn] = useState(FOCUS_TTN);
+  const [launched, setLaunched] = useState<number | null>(null);
   const split = useQuery({ queryKey: ["split", ttn], queryFn: () => api<Split>(`/api/sim/split/${ttn}`), enabled: /^59\d{12}$/.test(ttn) });
 
   const post = useMutation({
@@ -89,6 +90,7 @@ function Sim() {
               <input value={ttn} onChange={(e) => setTtn(e.target.value.replace(/\D/g, ""))} className="ttn w-44 rounded border border-line bg-surface px-2 py-1" />
             </label>
           </div>
+          {split.data && <Verdict split={split.data} />}
           <div className="grid border-y border-line bg-surface md:grid-cols-2 md:divide-x md:divide-line">
             <div className="p-5">
               <h2 className="mb-3 font-medium text-ink-2">Що бачить клієнт</h2>
@@ -120,9 +122,13 @@ function Sim() {
           <p className="mb-3 text-sm text-ink-2">Запуск очищає дані й перемотує час на 17.10, 11:00. Час іде зі швидкістю ×60. Посилка в центрі сценарію: 59 0000 0000 0001.</p>
           <ul className="divide-y divide-line border-y border-line bg-surface">
             {scenarios.map((s) => (
-              <li key={s.id} className="flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
+              <li key={s.id} className={`relative flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 ${launched === s.id ? "bg-bg" : ""}`}>
+                {launched === s.id && <span className="absolute inset-y-0 left-0 w-1 bg-ink" aria-hidden />}
                 <div className="min-w-64 flex-1">
-                  <p className="font-medium">{s.title}</p>
+                  <p className="font-medium">
+                    {s.title}
+                    {launched === s.id && <span className="ml-2 rounded bg-ink px-2 py-0.5 text-xs font-normal text-white">Запущено</span>}
+                  </p>
                   <p className="text-sm text-ink-2">{s.text}</p>
                   <p className="text-sm text-ink-2">Дивіться: оператор, {s.branch}</p>
                 </div>
@@ -131,10 +137,11 @@ function Sim() {
                   disabled={post.isPending}
                   onClick={() => {
                     setTtn(FOCUS_TTN);
+                    setLaunched(s.id);
                     post.mutate({ path: `/api/sim/scenarios/${s.id}` });
                   }}
                 >
-                  Запустити
+                  {launched === s.id ? "Запустити знову" : "Запустити"}
                 </button>
               </li>
             ))}
@@ -143,4 +150,24 @@ function Sim() {
       </main>
     </div>
   );
+}
+
+/** One sentence that says whether the two views disagree — the point of the demo. */
+function Verdict({ split }: { split: Split }) {
+  const { client, operator, mode } = split;
+  const promised = client.statusCode === "5" || client.statusCode === "6";
+  const seen = operator.visibleInIncoming || operator.level !== "green";
+  let tone = "bg-lvl-green-bg text-lvl-green";
+  let text = "Клієнт і оператор бачать узгоджену картину.";
+  if (!client.statusCode && !seen) {
+    tone = "bg-lvl-grey-bg text-lvl-grey";
+    text = "Ні клієнт, ні оператор поки нічого не бачать про цю посилку.";
+  } else if (promised && !seen) {
+    tone = "bg-lvl-red-bg text-lvl-red";
+    text = `Розбіжність: клієнту обіцяно ${client.eta ? formatTime(client.eta) : "доставку"}, а оператор відділення посилки не бачить.`;
+  } else if (mode === "with_solution" && operator.level !== "green") {
+    tone = "bg-lvl-orange-bg text-lvl-orange";
+    text = `Рішення працює: оператор бачить проблему «${operator.problems.map((p) => problemText[p.kind]).join(", ")}» і знає, що робити.`;
+  }
+  return <p className={`mb-3 rounded px-4 py-3 font-medium ${tone}`} role="status">{text}</p>;
 }

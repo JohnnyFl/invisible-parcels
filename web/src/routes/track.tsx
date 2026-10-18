@@ -32,7 +32,7 @@ function TrackPage() {
       </div>
       <main className="mx-auto max-w-md px-4 py-10">
         <h1 className="text-2xl font-semibold">Відстежити посилку</h1>
-        <p className="mt-1 text-ink-2">Так статус бачить клієнт у застосунку.</p>
+        <p className="mt-1 text-ink-2">Так статус бачить клієнт у застосунку. Для демо спробуйте накладну 59 0000 0000 0001 і телефон 067 000 0001.</p>
         <form onSubmit={submit} className="mt-6 space-y-4">
           <label className="block">
             <span className="mb-1 block text-sm text-ink-2">Номер накладної</span>

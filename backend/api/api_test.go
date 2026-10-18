@@ -469,11 +469,16 @@ func TestSplit_ShowsClientAndOperatorViews(t *testing.T) {
 	}
 }
 
-func TestPhysical_ProxiesEmulator(t *testing.T) {
-	d := testDepsEmu(t, fakeEmulator(t, map[string][]string{"branch-kyiv-12": {contract.TTN(1)}}).URL)
+func TestPhysical_FlagsParcelsTheSystemDoesNotKnowAreHere(t *testing.T) {
+	d := testDepsEmu(t, fakeEmulator(t, map[string][]string{"branch-kyiv-12": {contract.TTN(1), contract.TTN(2)}}).URL)
 	e := NewServer(d)
-	rows, code := getJSON[[]string](t, e, "/api/operator/physical", operatorCookie(d, "branch-kyiv-12"))
-	if code != 200 || len(rows) != 1 {
+	ingest(t, e, "ingest", []contract.Event{{EventID: "u2", Kind: contract.KindUnloaded, TTN: contract.TTN(2), LocationID: "branch-kyiv-12", OccurredAt: t0, Source: "np"}})
+	type shelf struct {
+		TTN        string `json:"ttn"`
+		Registered bool   `json:"registered"`
+	}
+	rows, code := getJSON[[]shelf](t, e, "/api/operator/physical", operatorCookie(d, "branch-kyiv-12"))
+	if code != 200 || len(rows) != 2 || rows[0].TTN != contract.TTN(1) || rows[0].Registered || !rows[1].Registered {
 		t.Fatalf("%d %+v", code, rows)
 	}
 	d2 := testDepsEmu(t, "http://127.0.0.1:1")

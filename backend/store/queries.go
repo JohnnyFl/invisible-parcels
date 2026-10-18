@@ -130,3 +130,18 @@ func (s *Store) Audit(ctx context.Context, at time.Time, role, branchID, action,
 		at, role, branchID, action, ttn, result)
 	return err
 }
+
+// RegisteredAt returns which of ttns the system already knows arrived at the branch.
+func (s *Store) RegisteredAt(ctx context.Context, branchID string, ttns []string) (map[string]bool, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT DISTINCT ttn FROM events
+		WHERE location_id = $1 AND ttn = ANY($2) AND kind IN ('unloaded', 'arrived_branch')`, branchID, ttns)
+	if err != nil {
+		return nil, err
+	}
+	known, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	out := make(map[string]bool, len(known))
+	for _, t := range known {
+		out[t] = true
+	}
+	return out, err
+}

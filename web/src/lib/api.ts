@@ -7,6 +7,7 @@ export interface Me { role: Role; branchId?: string }
 export interface Location { id: string; kind: "branch" | "hub"; city: string; name: string }
 export interface Problem { kind: ProblemKind; severity: Level; since: string }
 export interface ProblemRow { ttn: string; level: Level; problems: Problem[]; destination: string; location: string }
+export interface ShelfRow { ttn: string; registered: boolean }
 export interface IncomingRow { ttn: string; from: string; tripId: string; eta: string }
 export interface ScanResult { outcome: "accept" | "redirect" | "hold" | "not_found"; nextLocation?: string }
 export interface Track {
@@ -39,6 +40,10 @@ export async function api<T>(path: string, init?: RequestInit & { json?: unknown
     body: json !== undefined ? JSON.stringify(json) : rest.body,
   });
   if (!res.ok) {
+    // an expired session anywhere sends the user back to the login form
+    if (res.status === 401 && !path.startsWith("/api/me") && !path.startsWith("/api/login") && location.pathname !== "/login" && location.pathname !== "/track") {
+      location.assign("/login");
+    }
     const body = await res.json().catch(() => ({}));
     throw new ApiError(res.status, body.error ?? body.message ?? res.statusText);
   }

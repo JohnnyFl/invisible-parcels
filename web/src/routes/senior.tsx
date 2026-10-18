@@ -19,7 +19,7 @@ const order: Level[] = ["red", "orange", "yellow", "grey"];
 function Senior() {
   useInvalidateStream(true);
   const { now, clock } = useVirtualNow();
-  const { data } = useQuery({ queryKey: ["problems"], queryFn: () => api<ProblemRow[]>("/api/senior/problems") });
+  const { data, isPending } = useQuery({ queryKey: ["problems"], queryFn: () => api<ProblemRow[]>("/api/senior/problems") });
   const [filter, setFilter] = useState<Level | null>(null);
   const risky = (r: ProblemRow) => r.problems.some((p) => p.kind === "risky_return");
   const rows = (data ?? []).filter((r) => !filter || r.level === filter).sort((a, b) => Number(risky(b)) - Number(risky(a)));
@@ -45,7 +45,9 @@ function Senior() {
                 </button>
               ))}
             </div>
-            {rows.length === 0 ? (
+            {isPending ? (
+              <p className="border-y border-line bg-surface px-4 py-6 text-ink-2">Завантаження…</p>
+            ) : rows.length === 0 ? (
               <p className="border-y border-line bg-surface px-4 py-6 text-ink-2">Проблемних посилок немає.</p>
             ) : (
               <ParcelTable rows={rows} now={now} showBranch />

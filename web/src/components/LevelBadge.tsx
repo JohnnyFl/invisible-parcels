@@ -18,6 +18,17 @@ export const problemText: Record<ProblemKind, string> = {
   incident: "Інцидент",
 };
 
+/** What the operator should do, per problem — the row's call to action. */
+export const problemHint: Record<ProblemKind, string> = {
+  unknown: "Посилки немає в системі. Тримайте її на полиці ідентифікації, не повертайте навмання.",
+  misrouted: "Посилка не з маршруту цього відділення. Переадресуйте її, щоб вона не загубилась.",
+  risky_return: "Посилку повертають без ідентифікації. З'ясуйте, хто і чому її забрав.",
+  broken_chain: "Рейс прибув, а вивантаження не відскановано. Перевірте полиці й зону розвантаження.",
+  overdue: "Прогноз доставки минув, а посилка не прибула. Можливо, вона вже на складі без скану.",
+  stuck: "Понад 12 годин жодних подій. Уточніть стан у сортувального центру.",
+  incident: "Рейс постраждав. Затримка має відому причину, посилка не загублена.",
+};
+
 export const levelClass: Record<Level, { fg: string; bg: string; rail: string }> = {
   red: { fg: "text-lvl-red", bg: "bg-lvl-red-bg", rail: "bg-lvl-red" },
   orange: { fg: "text-lvl-orange", bg: "bg-lvl-orange-bg", rail: "bg-lvl-orange" },

@@ -173,12 +173,31 @@ func registerOperator(g *echo.Group, d Deps) {
 		return c.JSON(http.StatusOK, nonNil(rows))
 	})
 
+	// Demo-only shelf: what physically lies here, unregistered parcels first —
+	// those are the "invisible" ones the product is about.
 	g.GET("/physical", func(c *echo.Context) error {
-		ttns, err := d.Emu.Physical(c.Request().Context(), auth.FromContext(c).BranchID)
+		ctx := c.Request().Context()
+		branch := auth.FromContext(c).BranchID
+		ttns, err := d.Emu.Physical(ctx, branch)
 		if err != nil {
 			return errEmulator(c, err)
 		}
-		return c.JSON(http.StatusOK, nonNil(ttns))
+		known, err := d.Store.RegisteredAt(ctx, branch, ttns)
+		if err != nil {
+			return err
+		}
+		type shelfRow struct {
+			TTN        string `json:"ttn"`
+			Registered bool   `json:"registered"`
+		}
+		rows := make([]shelfRow, len(ttns))
+		for i, t := range ttns {
+			rows[i] = shelfRow{t, known[t]}
+		}
+		slices.SortStableFunc(rows, func(a, b shelfRow) int {
+			return cmp.Compare(boolInt(a.Registered), boolInt(b.Registered))
+		})
+		return c.JSON(http.StatusOK, rows)
 	})
 
 	// Q11: only for an operator of a branch, minimal answer, rate limited, audited.
@@ -259,6 +278,13 @@ func registerOperator(g *echo.Group, d Deps) {
 		d.Store.Audit(ctx, time.Now(), s.Role, s.BranchID, action, ttn, "ok")
 		return c.JSON(http.StatusOK, map[string]string{"result": "ok"})
 	})
+}
+
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 func nonNil[T any](s []T) []T {

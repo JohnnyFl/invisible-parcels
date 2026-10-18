@@ -25,7 +25,8 @@ export function ScanDialog({ ttn, mode, onClose }: { ttn: string | null; mode?: 
   });
   const act = useMutation({
     mutationFn: (a: Action) =>
-      api(`/api/operator/parcels/${ttn}/${a}`, { method: "POST", json: a === "return" ? { reason, comment } : {} }),
+      // a reason goes only when the operator actually chose one in the form
+      api(`/api/operator/parcels/${ttn}/${a}`, { method: "POST", json: a === "return" && returning ? { reason, comment } : {} }),
     onSuccess: () => {
       qc.invalidateQueries();
       ref.current?.close(); // fires onClose
@@ -101,7 +102,7 @@ export function ScanDialog({ ttn, mode, onClose }: { ttn: string | null; mode?: 
                   <textarea required value={comment} onChange={(e) => setComment(e.target.value)} className="mt-2 w-full rounded border border-line p-2" placeholder="Опишіть причину" />
                 )}
               </fieldset>
-              {mode === "with_solution" && <p className="mb-4 text-sm text-ink-2">Повернення побачить старша зміна, доки посилку не відсканують деінде.</p>}
+              {mode === "with_solution" && <p className="mb-4 text-sm text-ink-2">Повернення з причиною потрапить у журнал. Якщо посилку не ідентифіковано, його побачить старша зміна.</p>}
               <div className="flex gap-2">
                 <button className={primary} disabled={act.isPending}>Повернути</button>
                 <button type="button" className={secondary} onClick={() => setReturning(false)}>Назад</button>
