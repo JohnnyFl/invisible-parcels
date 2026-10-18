@@ -11,7 +11,7 @@ import (
 var t0 = time.Date(2026, 10, 17, 8, 0, 0, 0, time.UTC)
 
 func trip(id string) func(*contract.Event) { return func(e *contract.Event) { e.TripID = id } }
-func loc(id string) func(*contract.Event) { return func(e *contract.Event) { e.LocationID = id } }
+func loc(id string) func(*contract.Event)  { return func(e *contract.Event) { e.LocationID = id } }
 
 func ev(kind string, at time.Duration, mod ...func(*contract.Event)) contract.Event {
 	e := contract.Event{Kind: kind, OccurredAt: t0.Add(at)}
@@ -64,7 +64,12 @@ func TestClassify(t *testing.T) {
 		{"plain return is not risky", in(3*time.Hour, created, ev(contract.KindReturnInitiated, 2*time.Hour)), Green, nil},
 		{"arrived clears everything", in(40*time.Hour, created, tripArrived, ev(contract.KindUnloaded, 4*time.Hour, loc("branch-kyiv-12"), trip("trip-1"))), Green, nil},
 		{"issued clears everything", in(40*time.Hour, created, ev(contract.KindIssued, 3*time.Hour)), Green, nil},
-		{"np scheduled date drives overdue", func() Input { s := t0.Add(5 * time.Hour); i := in(7*time.Hour+time.Minute, created, ev(contract.KindAccepted, 6*time.Hour)); i.NPScheduled = &s; return i }(), Orange, []Kind{Overdue}},
+		{"np scheduled date drives overdue", func() Input {
+			s := t0.Add(5 * time.Hour)
+			i := in(7*time.Hour+time.Minute, created, ev(contract.KindAccepted, 6*time.Hour))
+			i.NPScheduled = &s
+			return i
+		}(), Orange, []Kind{Overdue}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

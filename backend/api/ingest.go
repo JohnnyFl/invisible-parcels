@@ -32,7 +32,7 @@ func ingestHandler(d Deps) echo.HandlerFunc {
 			return err
 		}
 		if n > 0 {
-			d.Hub.Publish("problems", "incoming", "track")
+			d.Hub.Publish("problems", "incoming", "track", "physical")
 		}
 		return c.JSON(http.StatusOK, map[string]any{"success": true, "inserted": n})
 	}

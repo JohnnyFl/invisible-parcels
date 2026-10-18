@@ -23,7 +23,7 @@
 - Інтерфейс українською. Фірмовий червоний `#DA291C` лише для шапки й основних кнопок. Текст `#202124`, вторинний `#5F6368`, фон `#F8F9FA`. Статус завжди має іконку + текст. Логотипа НП немає, у шапці «Концепт для Нової пошти».
 - Дати у форматі НП (`ScheduledDeliveryDate`) — у часовому поясі `Europe/Kyiv`; `contract` імпортує `time/tzdata` (distroless без tzdata).
 - Порти: backend `8080`, emulator `8090`, web dev `5173`.
-- Тести з БД беруть `TEST_DATABASE_URL` (типово `postgres://novapost:novapost@localhost:5432/novapost?sslmode=disable`) і запускаються з `go test -p 1 ./...`.
+- Тести з БД беруть `TEST_DATABASE_URL` (типово окрема база `novapost_test`, створюється автоматично) і запускаються з `go test -p 1 ./...`.
 - Кожен коміт закінчується рядком `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 
 ## Review Focus

@@ -70,7 +70,9 @@ func TestAdmin_ScenarioClockPhysicalOperatorEvent(t *testing.T) {
 	vt := scenarios.Start.Add(48 * time.Hour).Format(time.RFC3339)
 	post(t, srv.URL+"/admin/clock", `{"virtualNow":"`+vt+`","speed":0}`)
 	resp, _ := http.Get(srv.URL + "/admin/physical?location=branch-kyiv-12")
-	var ph struct{ TTNs []string `json:"ttns"` }
+	var ph struct {
+		TTNs []string `json:"ttns"`
+	}
 	json.NewDecoder(resp.Body).Decode(&ph)
 	if !strings.Contains(strings.Join(ph.TTNs, ","), scenarios.FocusTTN) {
 		t.Fatalf("physical: %+v", ph)

@@ -5,21 +5,18 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
 	"novapost/backend/emuclient"
 	"novapost/backend/store"
+	"novapost/backend/testdb"
 	"novapost/contract"
 )
 
 func testStore(t *testing.T) *store.Store {
 	t.Helper()
-	url := os.Getenv("TEST_DATABASE_URL")
-	if url == "" {
-		url = "postgres://novapost:novapost@localhost:5432/novapost?sslmode=disable"
-	}
+	url := testdb.URL(t)
 	st, err := store.Open(context.Background(), url)
 	if err != nil {
 		t.Fatalf("open db (run `make db`): %v", err)

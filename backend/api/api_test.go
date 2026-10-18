@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +15,7 @@ import (
 	"novapost/backend/emuclient"
 	"novapost/backend/sim"
 	"novapost/backend/store"
+	"novapost/backend/testdb"
 	"novapost/contract"
 )
 
@@ -39,10 +39,7 @@ func testDeps(t *testing.T) Deps { return testDepsEmu(t, fakeEmulator(t, nil).UR
 
 func testDepsEmu(t *testing.T, emuURL string) Deps {
 	t.Helper()
-	url := os.Getenv("TEST_DATABASE_URL")
-	if url == "" {
-		url = "postgres://novapost:novapost@localhost:5432/novapost?sslmode=disable"
-	}
+	url := testdb.URL(t)
 	st, err := store.Open(context.Background(), url)
 	if err != nil {
 		t.Fatalf("open db (run `make db`): %v", err)
@@ -550,5 +547,17 @@ func TestClock_ReadableByAnySession(t *testing.T) {
 	rec := do(e, jsonReq("GET", "/api/clock", "", operatorCookie(d, "branch-kyiv-12")))
 	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"mode":"with_solution"`) {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestSimAPI_ClockChangeInvalidatesShelfAndTracking(t *testing.T) {
+	d := testDeps(t)
+	e := NewServer(d)
+	ch, unsub := d.Hub.Subscribe()
+	defer unsub()
+	do(e, jsonReq("POST", "/api/sim/clock", `{"speed":0}`, adminCookie(d)))
+	keys := strings.Join(<-ch, ",")
+	if !strings.Contains(keys, "physical") || !strings.Contains(keys, "track") {
+		t.Fatal(keys)
 	}
 }

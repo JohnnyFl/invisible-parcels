@@ -13,6 +13,9 @@ import (
 	"novapost/contract"
 )
 
+// allKeys: a clock, mode or scenario change can affect every screen.
+var allKeys = []string{"clock", "problems", "incoming", "track", "physical"}
+
 func errEmulator(c *echo.Context, err error) error {
 	log.Printf("emulator: %v", err)
 	return c.JSON(http.StatusBadGateway, map[string]string{"error": "emulator unavailable"})
@@ -53,7 +56,7 @@ func simSetClock(d Deps) echo.HandlerFunc {
 				return errEmulator(c, err)
 			}
 		}
-		d.Hub.Publish("clock", "problems", "incoming")
+		d.Hub.Publish(allKeys...)
 		return c.JSON(http.StatusOK, clockJSON(d))
 	}
 }
@@ -69,7 +72,7 @@ func simSetMode(d Deps) echo.HandlerFunc {
 		if err := d.Sim.SetMode(c.Request().Context(), req.Mode); err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
-		d.Hub.Publish("clock", "problems", "incoming")
+		d.Hub.Publish(allKeys...)
 		return c.JSON(http.StatusOK, clockJSON(d))
 	}
 }
@@ -86,7 +89,7 @@ func simReset(d Deps) echo.HandlerFunc {
 		if err := d.Sim.SetSpeed(ctx, 0); err != nil {
 			return errEmulator(c, err)
 		}
-		d.Hub.Publish("clock", "problems", "incoming", "track")
+		d.Hub.Publish(allKeys...)
 		return c.JSON(http.StatusOK, clockJSON(d))
 	}
 }
@@ -114,7 +117,7 @@ func simScenario(d Deps) echo.HandlerFunc {
 		if err := d.Sim.SetSpeed(ctx, 60); err != nil {
 			return errEmulator(c, err)
 		}
-		d.Hub.Publish("clock", "problems", "incoming", "track")
+		d.Hub.Publish(allKeys...)
 		return c.JSON(http.StatusOK, clockJSON(d))
 	}
 }

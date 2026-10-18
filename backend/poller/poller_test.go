@@ -5,22 +5,19 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"novapost/backend/emuclient"
 	"novapost/backend/store"
+	"novapost/backend/testdb"
 	"novapost/contract"
 )
 
 func testStore(t *testing.T) *store.Store {
 	t.Helper()
-	url := os.Getenv("TEST_DATABASE_URL")
-	if url == "" {
-		url = "postgres://novapost:novapost@localhost:5432/novapost?sslmode=disable"
-	}
+	url := testdb.URL(t)
 	st, err := store.Open(context.Background(), url)
 	if err != nil {
 		t.Fatalf("open db (run `make db`): %v", err)
@@ -65,8 +62,14 @@ func TestPoller_SavesStatusAndKeepsSnapshotWhenEmulatorDown(t *testing.T) {
 	var changes atomic.Int32
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
-	go func() { Run(ctx, st, &emuclient.Client{URL: emu.URL, HTTP: http.DefaultClient}, 10*time.Millisecond, func() { changes.Add(1) }); close(done) }()
-	waitFor(t, func() bool { c, _, _, ok, _ := st.NPStatus(context.Background(), contract.TTN(1)); return ok && c == "6" })
+	go func() {
+		Run(ctx, st, &emuclient.Client{URL: emu.URL, HTTP: http.DefaultClient}, 10*time.Millisecond, func() { changes.Add(1) })
+		close(done)
+	}()
+	waitFor(t, func() bool {
+		c, _, _, ok, _ := st.NPStatus(context.Background(), contract.TTN(1))
+		return ok && c == "6"
+	})
 	_, _, sched, _, _ := st.NPStatus(context.Background(), contract.TTN(1))
 	if want := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC); sched == nil || !sched.Equal(want) {
 		t.Fatalf("scheduled %v, want %v (15:00 Kyiv)", sched, want)
