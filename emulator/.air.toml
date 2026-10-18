@@ -1,0 +1,10 @@
+# run from repo root: go tool air -c emulator/.air.toml
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o ./tmp/emulator ./emulator/cmd"
+  entrypoint = ["./tmp/emulator"]
+  include_ext = ["go", "sql"]
+  include_dir = ["emulator", "contract"]
+  exclude_regex = ["_test\\.go"]
