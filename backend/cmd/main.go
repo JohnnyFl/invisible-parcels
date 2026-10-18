@@ -29,5 +29,12 @@ func main() {
 	}
 	hub := api.NewHub()
 	go poller.Run(ctx, st, emu, cfg.NPPollInterval, func() { hub.Publish("track", "problems") })
+	go func() { // while virtual time runs, problems age and escalate: nudge clients
+		for range time.Tick(5 * time.Second) {
+			if s.Clock().Speed > 0 {
+				hub.Publish("problems", "incoming", "track", "clock", "physical")
+			}
+		}
+	}()
 	log.Fatal(api.NewServer(api.Deps{Cfg: cfg, Store: st, Hub: hub, Sim: s, Emu: emu}).Start(":" + cfg.Port))
 }

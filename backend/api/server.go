@@ -44,5 +44,6 @@ func NewServer(d Deps) *echo.Echo {
 	registerOperator(e.Group("/api/operator", auth.Middleware(d.Cfg.AppSecret, "operator")), d)
 	registerSenior(e.Group("/api/senior", auth.Middleware(d.Cfg.AppSecret, "senior")), d)
 	e.GET("/api/track/:ttn", trackHandler(d))
+	e.GET("/api/stream", streamHandler(d.Hub), auth.Middleware(d.Cfg.AppSecret, "admin", "senior", "operator"))
 	return e
 }

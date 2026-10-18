@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -479,5 +480,63 @@ func TestPhysical_ProxiesEmulator(t *testing.T) {
 	d2 := testDepsEmu(t, "http://127.0.0.1:1")
 	if rec := do(NewServer(d2), jsonReq("GET", "/api/operator/physical", "", operatorCookie(d2, "branch-kyiv-12"))); rec.Code != 502 {
 		t.Fatalf("emulator down: %d", rec.Code)
+	}
+}
+
+func readDataLine(t *testing.T, r *bufio.Reader) string {
+	t.Helper()
+	for {
+		line, err := r.ReadString('\n')
+		if err != nil {
+			t.Fatalf("stream: %v", err)
+		}
+		if strings.HasPrefix(line, "data: ") {
+			return line
+		}
+	}
+}
+
+func TestStream_DeliversInvalidate(t *testing.T) {
+	d := testDeps(t)
+	srv := httptest.NewServer(NewServer(d))
+	defer srv.Close()
+	req, _ := http.NewRequest("GET", srv.URL+"/api/stream", nil)
+	req.AddCookie(adminCookie(d))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
+		t.Fatalf("content-type %q", ct)
+	}
+	go func() { time.Sleep(50 * time.Millisecond); d.Hub.Publish("problems") }()
+	line := readDataLine(t, bufio.NewReader(resp.Body))
+	if !strings.Contains(line, `"type":"invalidate"`) || !strings.Contains(line, `"keys":["problems"]`) {
+		t.Fatal(line)
+	}
+}
+
+func TestStream_RequiresSession(t *testing.T) {
+	if rec := do(NewServer(testDeps(t)), jsonReq("GET", "/api/stream", "")); rec.Code != 401 {
+		t.Fatal(rec.Code)
+	}
+}
+
+func TestHub_SlowSubscriberDoesNotBlock(t *testing.T) {
+	h := NewHub()
+	_, unsub := h.Subscribe()
+	defer unsub()
+	done := make(chan struct{})
+	go func() {
+		for i := 0; i < 100; i++ {
+			h.Publish("x")
+		}
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("Publish blocked on a full subscriber")
 	}
 }

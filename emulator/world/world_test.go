@@ -94,3 +94,12 @@ func TestTrack_InTransitAfterDeparture(t *testing.T) {
 		t.Fatalf("%+v", st)
 	}
 }
+
+func TestPhysical_NoDuplicates(t *testing.T) {
+	w := New()
+	w.Load(hiddenUnloadFacts())
+	got := w.Physical("branch-kyiv-12", t0.Add(6*time.Hour))
+	if len(got) != 1 {
+		t.Fatalf("%v", got)
+	}
+}

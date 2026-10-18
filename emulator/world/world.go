@@ -176,6 +176,7 @@ func (w *World) Physical(locationID string, now time.Time) []string {
 			continue
 		}
 		if _, ok := at[e.TTN]; !ok {
+			at[e.TTN] = ""
 			order = append(order, e.TTN)
 		}
 		switch {
