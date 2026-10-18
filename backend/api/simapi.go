@@ -108,10 +108,15 @@ func simScenario(d Deps) echo.HandlerFunc {
 		if err := d.Store.Reset(ctx); err != nil {
 			return err
 		}
-		if err := d.Emu.LoadScenario(ctx, id); err != nil {
+		// pause at the scenario start before loading, so the emulator never pushes
+		// the new timeline against the previous run's clock
+		if err := d.Sim.SetSpeed(ctx, 0); err != nil {
 			return errEmulator(c, err)
 		}
 		if err := d.Sim.Jump(ctx, contract.ScenarioStart); err != nil {
+			return errEmulator(c, err)
+		}
+		if err := d.Emu.LoadScenario(ctx, id); err != nil {
 			return errEmulator(c, err)
 		}
 		if err := d.Sim.SetSpeed(ctx, 60); err != nil {
@@ -151,7 +156,7 @@ func simSplit(d Deps) echo.HandlerFunc {
 				}
 			}
 		}
-		rows, err := problemRows(ctx, d, []string{ttn})
+		rows, err := problemRows(ctx, d, []string{ttn}, true)
 		if err != nil {
 			return err
 		}

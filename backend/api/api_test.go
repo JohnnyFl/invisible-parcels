@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -578,5 +580,47 @@ func TestReturnOfHeldUnknownParcel_IsRiskyEvenWithPausedClock(t *testing.T) {
 	}
 	if !strings.Contains(kinds, "risky_return") {
 		t.Fatalf("%+v", rows)
+	}
+}
+
+func TestSimScenario_PausesAndRewindsEmulatorBeforeLoading(t *testing.T) {
+	var calls []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/admin/clock" {
+			var c struct {
+				VirtualNow time.Time `json:"virtualNow"`
+				Speed      float64   `json:"speed"`
+			}
+			json.NewDecoder(r.Body).Decode(&c)
+			calls = append(calls, fmt.Sprintf("clock %s %v", c.VirtualNow.UTC().Format(time.RFC3339), c.Speed))
+		} else {
+			calls = append(calls, r.URL.Path)
+		}
+		w.WriteHeader(204)
+	}))
+	defer srv.Close()
+	d := testDepsEmu(t, srv.URL)
+	d.Sim.Jump(context.Background(), t0.Add(30*time.Hour))
+	d.Sim.SetSpeed(context.Background(), 600)
+	calls = nil
+	if rec := do(NewServer(d), jsonReq("POST", "/api/sim/scenarios/2", ``, adminCookie(d))); rec.Code != 200 {
+		t.Fatal(rec.Code)
+	}
+	load := slices.Index(calls, "/admin/scenarios/2")
+	rewound := slices.Index(calls, "clock "+t0.Format(time.RFC3339)+" 0")
+	if load < 0 || rewound < 0 || rewound > load {
+		t.Fatalf("emulator must be paused at scenario start before loading: %v", calls)
+	}
+}
+
+func TestOperatorProblems_DoNotRevealDestination(t *testing.T) {
+	d := testDeps(t)
+	e := NewServer(d)
+	ingest(t, e, "ingest", scenario2Events())
+	lviv := operatorCookie(d, "branch-lviv-5")
+	scan(t, e, lviv, contract.TTN(1)) // known parcel scanned off-route → misrouted at Lviv
+	rec := do(e, jsonReq("GET", "/api/operator/problems", "", lviv))
+	if !strings.Contains(rec.Body.String(), "misrouted") || strings.Contains(rec.Body.String(), "branch-kyiv-12") {
+		t.Fatal(rec.Body.String())
 	}
 }

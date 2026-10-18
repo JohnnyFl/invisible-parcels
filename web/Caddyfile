@@ -1,5 +1,9 @@
 localhost {
 	tls internal
+	# the NP webhook is internal: the emulator calls backend:8080 directly
+	handle /api/ingest/* {
+		respond 404
+	}
 	handle /api/* {
 		reverse_proxy backend:8080 {
 			flush_interval -1

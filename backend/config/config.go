@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -46,8 +47,25 @@ func Load() Config {
 	if c.LookupLimitPerHour, err = strconv.Atoi(env("LOOKUP_LIMIT_PER_HOUR", "30")); err != nil {
 		log.Fatalf("LOOKUP_LIMIT_PER_HOUR: %v", err)
 	}
-	if c.AdminPassword == "admin" || c.AppSecret == "dev-app-secret" {
-		log.Println("WARNING: default passwords/secrets in use — set ADMIN_PASSWORD, SENIOR_PASSWORD, OPERATOR_PASSWORD, APP_SECRET, INGEST_SECRET outside local dev")
+	if d := DefaultSecrets(c); len(d) > 0 {
+		log.Printf("WARNING: default values in use for %s — set them outside local dev", strings.Join(d, ", "))
 	}
 	return c
+}
+
+// DefaultSecrets names the secrets still at their published dev defaults.
+func DefaultSecrets(c Config) []string {
+	var out []string
+	for _, s := range []struct{ name, value, def string }{
+		{"APP_SECRET", c.AppSecret, "dev-app-secret"},
+		{"INGEST_SECRET", c.IngestSecret, "dev-ingest-secret"},
+		{"ADMIN_PASSWORD", c.AdminPassword, "admin"},
+		{"SENIOR_PASSWORD", c.SeniorPassword, "senior"},
+		{"OPERATOR_PASSWORD", c.OperatorPassword, "operator"},
+	} {
+		if s.value == s.def {
+			out = append(out, s.name)
+		}
+	}
+	return out
 }

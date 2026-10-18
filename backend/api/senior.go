@@ -13,7 +13,7 @@ func registerSenior(g *echo.Group, d Deps) {
 		if err != nil {
 			return err
 		}
-		rows, err := problemRows(ctx, d, ttns)
+		rows, err := problemRows(ctx, d, ttns, true)
 		if err != nil {
 			return err
 		}

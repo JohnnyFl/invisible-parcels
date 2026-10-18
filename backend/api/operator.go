@@ -29,7 +29,9 @@ type ProblemRow struct {
 }
 
 // problemRows classifies TTNs and keeps the non-green ones, worst first, then oldest.
-func problemRows(ctx context.Context, d Deps, ttns []string) ([]ProblemRow, error) {
+// The final destination is shown only to the senior shift (spec §8: an operator's
+// scan must not reveal where a parcel is going).
+func problemRows(ctx context.Context, d Deps, ttns []string, withDestination bool) ([]ProblemRow, error) {
 	out := []ProblemRow{}
 	if d.Sim.Mode() == sim.ModeAsIs {
 		return out, nil // today's systems have no such screen
@@ -45,7 +47,7 @@ func problemRows(ctx context.Context, d Deps, ttns []string) ([]ProblemRow, erro
 			continue
 		}
 		row := ProblemRow{TTN: in.TTN, Level: lvl, Problems: ps, Location: lastLocation(in.Events)}
-		if in.Parcel != nil {
+		if in.Parcel != nil && withDestination {
 			row.Destination = in.Parcel.DestinationID
 		}
 		out = append(out, row)
@@ -156,7 +158,7 @@ func registerOperator(g *echo.Group, d Deps) {
 		if err != nil {
 			return err
 		}
-		rows, err := problemRows(ctx, d, ttns)
+		rows, err := problemRows(ctx, d, ttns, false)
 		if err != nil {
 			return err
 		}

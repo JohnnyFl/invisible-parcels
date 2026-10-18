@@ -42,7 +42,7 @@ function Operator() {
           ) : problems.data?.length === 0 ? (
             <p className="border-y border-line bg-surface px-4 py-6 text-ink-2">Проблемних посилок немає. Усе, що прямує у відділення, є в списку надходжень.</p>
           ) : (
-            problems.data && <ParcelTable rows={problems.data} now={now} actions={(r) => <button className="rounded border border-line px-3 py-1.5 text-sm hover:bg-bg" onClick={() => setScanning(r.ttn)}>Сканувати</button>} />
+            problems.data && <ParcelTable rows={problems.data} now={now} />
           )}
         </section>
 

@@ -1,10 +1,9 @@
-import type { ReactNode } from "react";
 import { formatAgo, formatTTN, type ProblemRow } from "../lib/api";
 import { useLocationName } from "../lib/queries";
 import { LevelBadge, levelClass, problemText } from "./LevelBadge";
 
 /** Problem list: a coloured rail per row, worst first (server sorts). */
-export function ParcelTable({ rows, now, actions, showBranch }: { rows: ProblemRow[]; now: Date; actions?: (r: ProblemRow) => ReactNode; showBranch?: boolean }) {
+export function ParcelTable({ rows, now, showBranch }: { rows: ProblemRow[]; now: Date; showBranch?: boolean }) {
   const name = useLocationName();
   return (
     <ul className="divide-y divide-line border-y border-line bg-surface">
@@ -28,7 +27,6 @@ export function ParcelTable({ rows, now, actions, showBranch }: { rows: ProblemR
               <div>{r.location ? name(r.location) : "Невідомо"}</div>
               <div className="text-ink-2">{showBranch && r.destination ? `Призначення: ${name(r.destination)}` : "Остання відома точка"}</div>
             </div>
-            {actions && <div className="ml-auto">{actions(r)}</div>}
           </li>
         );
       })}
