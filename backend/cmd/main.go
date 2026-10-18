@@ -10,6 +10,7 @@ import (
 	"novapost/backend/api"
 	"novapost/backend/config"
 	"novapost/backend/emuclient"
+	"novapost/backend/poller"
 	"novapost/backend/sim"
 	"novapost/backend/store"
 )
@@ -27,5 +28,6 @@ func main() {
 		log.Fatalf("sim: %v", err)
 	}
 	hub := api.NewHub()
+	go poller.Run(ctx, st, emu, cfg.NPPollInterval, func() { hub.Publish("track", "problems") })
 	log.Fatal(api.NewServer(api.Deps{Cfg: cfg, Store: st, Hub: hub, Sim: s, Emu: emu}).Start(":" + cfg.Port))
 }
