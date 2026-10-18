@@ -3,3 +3,4 @@ web/dist/
 tmp/
 .env
 .superpowers/
+caddy-root.crt

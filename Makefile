@@ -1,10 +1,8 @@
-.PHONY: db test emulator backend web
+.PHONY: db test emulator backend web up
 
+# local development: each target in its own terminal
 db:
 	docker compose up -d --wait postgres
-
-test: db
-	go test -p 1 ./...
 
 emulator:
 	go tool air -c emulator/.air.toml
@@ -14,3 +12,10 @@ backend:
 
 web:
 	cd web && npm run dev
+
+# full run in Docker: https://localhost
+up:
+	docker compose up --build
+
+test: db
+	go test -p 1 ./...
