@@ -11,13 +11,31 @@ import (
 	"time"
 
 	"novapost/backend/config"
+	"novapost/backend/emuclient"
+	"novapost/backend/sim"
 	"novapost/backend/store"
 	"novapost/contract"
 )
 
 var t0 = contract.ScenarioStart
 
-func testDeps(t *testing.T) Deps {
+// fakeEmulator accepts every admin call and serves physical/tracking from the given maps.
+func fakeEmulator(t *testing.T, physical map[string][]string) *httptest.Server {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/admin/physical":
+			json.NewEncoder(w).Encode(map[string][]string{"ttns": physical[r.URL.Query().Get("location")]})
+		default:
+			w.WriteHeader(204)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func testDeps(t *testing.T) Deps { return testDepsEmu(t, fakeEmulator(t, nil).URL) }
+
+func testDepsEmu(t *testing.T, emuURL string) Deps {
 	t.Helper()
 	url := os.Getenv("TEST_DATABASE_URL")
 	if url == "" {
@@ -28,9 +46,15 @@ func testDeps(t *testing.T) Deps {
 		t.Fatalf("open db (run `make db`): %v", err)
 	}
 	st.Reset(context.Background())
+	st.Pool.Exec(context.Background(), `DELETE FROM app_state`)
 	t.Cleanup(st.Pool.Close)
 	cfg := config.Config{IngestSecret: "ingest", AppSecret: "app", AdminPassword: "a", SeniorPassword: "s", OperatorPassword: "o", LookupLimitPerHour: 30}
-	return Deps{Cfg: cfg, Store: st, Hub: NewHub()}
+	emu := &emuclient.Client{URL: emuURL, HTTP: http.DefaultClient}
+	s, err := sim.New(context.Background(), st, emu)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return Deps{Cfg: cfg, Store: st, Hub: NewHub(), Sim: s, Emu: emu}
 }
 
 func scenario2Events() []contract.Event {
@@ -96,5 +120,51 @@ func TestLocations(t *testing.T) {
 	rec := do(NewServer(testDeps(t)), httptest.NewRequest("GET", "/api/locations", nil))
 	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"branch-kyiv-12"`) {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+}
+
+func jsonReq(method, path, body string) *http.Request {
+	req := httptest.NewRequest(method, path, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	return req
+}
+
+func TestSimAPI_ClockAndMode(t *testing.T) {
+	d := testDeps(t)
+	e := NewServer(d)
+	if rec := do(e, jsonReq("POST", "/api/sim/clock", `{"jumpTo":"2026-10-18T10:00:00Z","speed":0}`)); rec.Code != 200 {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	if rec := do(e, jsonReq("POST", "/api/sim/mode", `{"mode":"as_is"}`)); rec.Code != 200 {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	rec := do(e, httptest.NewRequest("GET", "/api/sim/clock", nil))
+	if !strings.Contains(rec.Body.String(), `"virtualNow":"2026-10-18T10:00:00Z"`) || !strings.Contains(rec.Body.String(), `"mode":"as_is"`) {
+		t.Fatal(rec.Body.String())
+	}
+	if rec := do(e, jsonReq("POST", "/api/sim/mode", `{"mode":"bogus"}`)); rec.Code != 400 {
+		t.Fatal(rec.Code)
+	}
+}
+
+func TestSimAPI_ScenarioWhenEmulatorDownIs502(t *testing.T) {
+	e := NewServer(testDepsEmu(t, "http://127.0.0.1:1"))
+	if rec := do(e, jsonReq("POST", "/api/sim/scenarios/2", ``)); rec.Code != 502 {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestSimAPI_ScenarioResetsDataAndStartsClock(t *testing.T) {
+	d := testDeps(t)
+	e := NewServer(d)
+	ingest(t, e, "ingest", scenario2Events())
+	if rec := do(e, jsonReq("POST", "/api/sim/scenarios/2", ``)); rec.Code != 200 {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	if p, _, _ := d.Store.Parcel(context.Background(), contract.TTN(1)); p != nil {
+		t.Fatal("data not reset")
+	}
+	if d.Sim.Clock().Speed != 60 || d.Sim.Now().Before(contract.ScenarioStart) {
+		t.Fatalf("clock %+v", d.Sim.Clock())
 	}
 }
