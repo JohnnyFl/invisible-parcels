@@ -540,3 +540,15 @@ func TestHub_SlowSubscriberDoesNotBlock(t *testing.T) {
 		t.Fatal("Publish blocked on a full subscriber")
 	}
 }
+
+func TestClock_ReadableByAnySession(t *testing.T) {
+	d := testDeps(t)
+	e := NewServer(d)
+	if rec := do(e, jsonReq("GET", "/api/clock", "")); rec.Code != 401 {
+		t.Fatal(rec.Code)
+	}
+	rec := do(e, jsonReq("GET", "/api/clock", "", operatorCookie(d, "branch-kyiv-12")))
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"mode":"with_solution"`) {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+}

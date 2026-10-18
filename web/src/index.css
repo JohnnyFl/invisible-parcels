@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+
+  --color-brand: #da291c;
+  --color-brand-dark: #b21f14;
+  --color-ink: #202124;
+  --color-ink-2: #5f6368;
+  --color-bg: #f8f9fa;
+  --color-surface: #ffffff;
+  --color-line: #e2e5e9;
+
+  /* severity: own hues, the "act now" red is deeper than the brand red */
+  --color-lvl-red: #b3261e;
+  --color-lvl-red-bg: #fce8e6;
+  --color-lvl-orange: #b45309;
+  --color-lvl-orange-bg: #fef3e2;
+  --color-lvl-yellow: #8a6d00;
+  --color-lvl-yellow-bg: #fff8d6;
+  --color-lvl-grey: #4b5563;
+  --color-lvl-grey-bg: #eef0f3;
+  --color-lvl-green: #1e7b45;
+  --color-lvl-green-bg: #e6f4ea;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+.ttn {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+dialog::backdrop {
+  background: rgb(32 33 36 / 0.45);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
