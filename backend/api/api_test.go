@@ -561,3 +561,22 @@ func TestSimAPI_ClockChangeInvalidatesShelfAndTracking(t *testing.T) {
 		t.Fatal(keys)
 	}
 }
+
+func TestReturnOfHeldUnknownParcel_IsRiskyEvenWithPausedClock(t *testing.T) {
+	d := testDeps(t)
+	e := NewServer(d)
+	op := operatorCookie(d, "branch-kharkiv-3")
+	scan(t, e, op, contract.TTN(77))
+	act(t, e, op, contract.TTN(77), "hold", "")
+	act(t, e, op, contract.TTN(77), "return", `{"reason":"refused"}`)
+	rows, _ := getJSON[[]problemRow](t, e, "/api/senior/problems", sessionCookie(d, "senior", ""))
+	kinds := ""
+	for _, r := range rows {
+		for _, p := range r.Problems {
+			kinds += p.Kind + ","
+		}
+	}
+	if !strings.Contains(kinds, "risky_return") {
+		t.Fatalf("%+v", rows)
+	}
+}

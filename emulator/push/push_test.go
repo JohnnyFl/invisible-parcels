@@ -6,9 +6,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"novapost/contract"
+	"novapost/emulator/world"
 )
 
 func TestPusherSignsBody(t *testing.T) {
@@ -36,4 +39,29 @@ func TestPusherErrorsOnNon2xx(t *testing.T) {
 	if err := p.Send(context.Background(), []contract.Event{{EventID: "e1"}}); err == nil {
 		t.Fatal("expected error")
 	}
+}
+
+func TestReset_WaitsForInFlightSend(t *testing.T) {
+	started, finished := make(chan struct{}), make(chan struct{})
+	var done atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(started)
+		time.Sleep(150 * time.Millisecond)
+		done.Store(true)
+		close(finished)
+	}))
+	defer srv.Close()
+	w := world.New()
+	w.Load([]world.Fact{{Event: contract.Event{EventID: "e1", Kind: contract.KindCreated, OccurredAt: time.Unix(0, 0)}}})
+	p := &Pusher{URL: srv.URL, Secret: "s", Client: srv.Client()}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go p.Run(ctx, w, func() time.Time { return time.Unix(10, 0) })
+	<-started
+	loadedAfterSend := false
+	p.Reset(func() { loadedAfterSend = done.Load() })
+	if !loadedAfterSend {
+		t.Fatal("world replaced while a send was still in flight")
+	}
+	<-finished
 }

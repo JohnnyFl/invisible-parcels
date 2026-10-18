@@ -90,7 +90,7 @@ func (s *Store) ParcelEvents(ctx context.Context, ttn string) ([]contract.Event,
 		WHERE ttn = $1
 		   OR (ttn IS NULL AND trip_id IN (SELECT trip_id FROM route_legs WHERE ttn = $1))
 		   OR (kind = 'incident' AND location_id IN (SELECT location_id FROM events WHERE ttn = $1 AND location_id IS NOT NULL))
-		ORDER BY occurred_at, event_id`, ttn)
+		ORDER BY occurred_at, received_at, event_id`, ttn)
 	if err != nil {
 		return nil, err
 	}

@@ -68,3 +68,22 @@ func TestParcel_Unknown(t *testing.T) {
 		t.Fatalf("%+v %v", p, err)
 	}
 }
+
+func TestParcelEvents_SameVirtualTimeKeepsArrivalOrder(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	at := t0.Add(time.Hour) // paused clock: identical virtual time
+	base := time.Now()
+	for i, e := range []contract.Event{
+		{EventID: "zz-scan", Kind: contract.KindOperatorScan},
+		{EventID: "mm-hold", Kind: contract.KindHold},
+		{EventID: "aa-return", Kind: contract.KindReturnInitiated},
+	} {
+		e.TTN, e.OccurredAt, e.Source = contract.TTN(9), at, "operator"
+		s.InsertEvents(ctx, []contract.Event{e}, base.Add(time.Duration(i)*time.Millisecond))
+	}
+	got, _ := s.ParcelEvents(ctx, contract.TTN(9))
+	if !reflect.DeepEqual(ids(got), []string{"zz-scan", "mm-hold", "aa-return"}) {
+		t.Fatalf("%v", ids(got))
+	}
+}

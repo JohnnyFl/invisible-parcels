@@ -21,8 +21,9 @@ type Pusher struct {
 	Secret string
 	Client *http.Client
 
-	mu      sync.Mutex
+	mu      sync.Mutex // guards pending
 	pending []contract.Event
+	sending sync.Mutex // held for a whole tick, so Clear waits for an in-flight send
 }
 
 // Send posts one ScanEvent.push envelope signed with HMAC.
@@ -51,8 +52,13 @@ func (p *Pusher) Send(ctx context.Context, events []contract.Event) error {
 	return nil
 }
 
-// Clear drops queued events (scenario reset).
-func (p *Pusher) Clear() {
+// Reset waits for any in-flight send, runs load (replace the world) and drops
+// the queue — atomically, so no old event lands after the backend reset and no
+// new event is lost.
+func (p *Pusher) Reset(load func()) {
+	p.sending.Lock()
+	defer p.sending.Unlock()
+	load()
 	p.mu.Lock()
 	p.pending = nil
 	p.mu.Unlock()
@@ -69,27 +75,33 @@ func (p *Pusher) Run(ctx context.Context, w *world.World, now func() time.Time) 
 			return
 		case <-tick.C:
 		}
+		p.tick(ctx, w, now)
+	}
+}
+
+func (p *Pusher) tick(ctx context.Context, w *world.World, now func() time.Time) {
+	p.sending.Lock()
+	defer p.sending.Unlock()
+	p.mu.Lock()
+	batch := append(p.pending, w.Due(now())...)
+	rand.Shuffle(len(batch), func(i, j int) { batch[i], batch[j] = batch[j], batch[i] })
+	var send []contract.Event
+	p.pending = nil
+	for _, e := range batch {
+		if rand.IntN(5) == 0 {
+			p.pending = append(p.pending, e)
+		} else {
+			send = append(send, e)
+		}
+	}
+	p.mu.Unlock()
+	if len(send) == 0 {
+		return
+	}
+	if err := p.Send(ctx, send); err != nil {
+		log.Printf("push: %v (will retry %d events)", err, len(send))
 		p.mu.Lock()
-		batch := append(p.pending, w.Due(now())...)
-		rand.Shuffle(len(batch), func(i, j int) { batch[i], batch[j] = batch[j], batch[i] })
-		var send []contract.Event
-		p.pending = nil
-		for _, e := range batch {
-			if rand.IntN(5) == 0 {
-				p.pending = append(p.pending, e)
-			} else {
-				send = append(send, e)
-			}
-		}
+		p.pending = append(p.pending, send...)
 		p.mu.Unlock()
-		if len(send) == 0 {
-			continue
-		}
-		if err := p.Send(ctx, send); err != nil {
-			log.Printf("push: %v (will retry %d events)", err, len(send))
-			p.mu.Lock()
-			p.pending = append(p.pending, send...)
-			p.mu.Unlock()
-		}
 	}
 }

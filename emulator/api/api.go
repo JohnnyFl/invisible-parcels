@@ -35,8 +35,9 @@ func (h *ClockHolder) Now() time.Time { return h.Get().Now(time.Now()) }
 
 const maxDocuments = 100
 
-// NewServer wires the routes. onReset is called whenever the world is replaced.
-func NewServer(w *world.World, clk *ClockHolder, onReset func()) *echo.Echo {
+// NewServer wires the routes. reset(load) must run load (replace the world) and
+// drop queued pushes atomically.
+func NewServer(w *world.World, clk *ClockHolder, reset func(load func())) *echo.Echo {
 	e := echo.New()
 
 	e.POST("/v2.0/json/", func(c *echo.Context) error {
@@ -75,8 +76,7 @@ func NewServer(w *world.World, clk *ClockHolder, onReset func()) *echo.Echo {
 	})
 
 	e.POST("/admin/reset", func(c *echo.Context) error {
-		w.Load(nil)
-		onReset()
+		reset(func() { w.Load(nil) })
 		return c.NoContent(http.StatusNoContent)
 	})
 
@@ -86,8 +86,7 @@ func NewServer(w *world.World, clk *ClockHolder, onReset func()) *echo.Echo {
 		if err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
-		w.Load(facts)
-		onReset()
+		reset(func() { w.Load(facts) })
 		return c.JSON(http.StatusOK, map[string]any{"facts": len(facts)})
 	})
 
