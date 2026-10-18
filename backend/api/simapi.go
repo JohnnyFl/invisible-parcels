@@ -8,6 +8,7 @@ import (
 
 	"github.com/labstack/echo/v5"
 
+	"novapost/backend/problems"
 	"novapost/backend/sim"
 	"novapost/contract"
 )
@@ -115,5 +116,55 @@ func simScenario(d Deps) echo.HandlerFunc {
 		}
 		d.Hub.Publish("clock", "problems", "incoming", "track")
 		return c.JSON(http.StatusOK, clockJSON(d))
+	}
+}
+
+// simSplit: what the client sees vs what the destination branch operator sees, now.
+func simSplit(d Deps) echo.HandlerFunc {
+	return func(c *echo.Context) error {
+		ttn := c.Param("ttn")
+		if !contract.TTNPattern.MatchString(ttn) {
+			return badTTN(c)
+		}
+		ctx := c.Request().Context()
+		client, _, err := track(ctx, d, ttn, true, "")
+		if err != nil {
+			return err
+		}
+		op := map[string]any{"visibleInIncoming": false, "level": problems.Green, "problems": []problems.Problem{}}
+		p, _, err := d.Store.Parcel(ctx, ttn)
+		if err != nil {
+			return err
+		}
+		if p != nil {
+			op["branch"] = p.DestinationID
+			incoming, err := d.Store.Incoming(ctx, p.DestinationID, d.Sim.Mode() == sim.ModeWithSolution)
+			if err != nil {
+				return err
+			}
+			for _, r := range incoming {
+				if r.TTN == ttn {
+					op["visibleInIncoming"] = true
+				}
+			}
+		}
+		rows, err := problemRows(ctx, d, []string{ttn})
+		if err != nil {
+			return err
+		}
+		if len(rows) == 1 {
+			op["level"], op["problems"] = rows[0].Level, rows[0].Problems
+		}
+		return c.JSON(http.StatusOK, map[string]any{"client": client, "operator": op, "mode": d.Sim.Mode()})
+	}
+}
+
+func simPhysical(d Deps) echo.HandlerFunc {
+	return func(c *echo.Context) error {
+		ttns, err := d.Emu.Physical(c.Request().Context(), c.QueryParam("location"))
+		if err != nil {
+			return errEmulator(c, err)
+		}
+		return c.JSON(http.StatusOK, nonNil(ttns))
 	}
 }

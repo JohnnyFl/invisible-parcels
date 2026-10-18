@@ -193,3 +193,291 @@ func TestSimAPI_ScenarioResetsDataAndStartsClock(t *testing.T) {
 		t.Fatalf("clock %+v", d.Sim.Clock())
 	}
 }
+
+type problemRow struct {
+	TTN      string `json:"ttn"`
+	Level    string `json:"level"`
+	Problems []struct {
+		Kind string `json:"kind"`
+	} `json:"problems"`
+	Destination string `json:"destination"`
+	Location    string `json:"location"`
+}
+
+func getJSON[T any](t *testing.T, e http.Handler, path string, c *http.Cookie) (T, int) {
+	t.Helper()
+	var out T
+	rec := do(e, jsonReq("GET", path, "", c))
+	json.Unmarshal(rec.Body.Bytes(), &out)
+	return out, rec.Code
+}
+
+func getProblems(t *testing.T, e http.Handler, c *http.Cookie) []problemRow {
+	t.Helper()
+	rows, code := getJSON[[]problemRow](t, e, "/api/operator/problems", c)
+	if code != 200 {
+		t.Fatalf("problems: %d", code)
+	}
+	return rows
+}
+
+type scanResult struct {
+	Outcome      string `json:"outcome"`
+	NextLocation string `json:"nextLocation"`
+}
+
+func scan(t *testing.T, e http.Handler, c *http.Cookie, ttn string) (scanResult, *httptest.ResponseRecorder) {
+	t.Helper()
+	rec := do(e, jsonReq("POST", "/api/operator/scan", `{"ttn":"`+ttn+`"}`, c))
+	var r scanResult
+	json.Unmarshal(rec.Body.Bytes(), &r)
+	return r, rec
+}
+
+func act(t *testing.T, e http.Handler, c *http.Cookie, ttn, action, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	return do(e, jsonReq("POST", "/api/operator/parcels/"+ttn+"/"+action, body, c))
+}
+
+func TestCase_HiddenUnload_BecomesOrangeThenRed(t *testing.T) {
+	d := testDeps(t)
+	ctx := context.Background()
+	e := NewServer(d)
+	op := operatorCookie(d, "branch-kyiv-12")
+	ingest(t, e, "ingest", scenario2Events()) // trip arrived at t0+4h, no unload reported
+	d.Sim.Jump(ctx, t0.Add(5*time.Hour))
+	rows := getProblems(t, e, op)
+	if len(rows) != 1 || rows[0].Level != "orange" || rows[0].Problems[0].Kind != "broken_chain" || rows[0].TTN != contract.TTN(1) {
+		t.Fatalf("%+v", rows)
+	}
+	d.Sim.Jump(ctx, t0.Add(10*time.Hour+time.Minute))
+	if rows := getProblems(t, e, op); len(rows) != 1 || rows[0].Level != "red" {
+		t.Fatalf("%+v", rows)
+	}
+	if out, rec := scan(t, e, op, contract.TTN(1)); out.Outcome != "accept" || strings.Contains(rec.Body.String(), "+380") {
+		t.Fatalf("%+v %s", out, rec.Body)
+	}
+	if rec := act(t, e, op, contract.TTN(1), "accept", ""); rec.Code != 200 {
+		t.Fatalf("accept: %d %s", rec.Code, rec.Body)
+	}
+	if rows := getProblems(t, e, op); len(rows) != 0 {
+		t.Fatalf("not cleared: %+v", rows)
+	}
+	// another branch does not see it
+	if rows := getProblems(t, e, operatorCookie(d, "branch-lviv-5")); len(rows) != 0 {
+		t.Fatalf("leaked to lviv: %+v", rows)
+	}
+}
+
+func TestOperatorProblems_HiddenInAsIsMode(t *testing.T) {
+	d := testDeps(t)
+	e := NewServer(d)
+	ingest(t, e, "ingest", scenario2Events())
+	d.Sim.Jump(context.Background(), t0.Add(5*time.Hour))
+	d.Sim.SetMode(context.Background(), sim.ModeAsIs)
+	if rows := getProblems(t, e, operatorCookie(d, "branch-kyiv-12")); len(rows) != 0 {
+		t.Fatalf("%+v", rows)
+	}
+}
+
+func TestIncoming_AsIsOnlyWithLoadedScan(t *testing.T) {
+	d := testDeps(t)
+	ctx := context.Background()
+	e := NewServer(d)
+	op := operatorCookie(d, "branch-kyiv-12")
+	ingest(t, e, "ingest", scenario2Events())
+	type row struct {
+		TTN    string `json:"ttn"`
+		From   string `json:"from"`
+		TripID string `json:"tripId"`
+	}
+	if rows, _ := getJSON[[]row](t, e, "/api/operator/incoming", op); len(rows) != 1 || rows[0].From != "hub-kyiv" || rows[0].TripID != "trip-1" {
+		t.Fatalf("with solution: %+v", rows)
+	}
+	d.Sim.SetMode(ctx, sim.ModeAsIs)
+	if rows, _ := getJSON[[]row](t, e, "/api/operator/incoming", op); len(rows) != 0 {
+		t.Fatalf("as is without loaded: %+v", rows)
+	}
+	ingest(t, e, "ingest", []contract.Event{{EventID: "l1", Kind: contract.KindLoaded, TTN: contract.TTN(1), TripID: "trip-1", LocationID: "hub-kyiv", OccurredAt: t0.Add(time.Hour), Source: "np"}})
+	if rows, _ := getJSON[[]row](t, e, "/api/operator/incoming", op); len(rows) != 1 {
+		t.Fatalf("as is with loaded: %+v", rows)
+	}
+}
+
+func TestScan_UnknownGoesOnHoldAndMisroutedIsRedirected(t *testing.T) {
+	d := testDeps(t)
+	e := NewServer(d)
+	ingest(t, e, "ingest", scenario2Events())
+	lviv := operatorCookie(d, "branch-lviv-5")
+	if out, _ := scan(t, e, lviv, contract.TTN(1)); out.Outcome != "redirect" || out.NextLocation != "hub-lviv" {
+		t.Fatalf("%+v", out)
+	}
+	if out, _ := scan(t, e, lviv, contract.TTN(77)); out.Outcome != "hold" {
+		t.Fatalf("%+v", out)
+	}
+	rows := getProblems(t, e, lviv)
+	kinds := map[string]string{}
+	for _, r := range rows {
+		kinds[r.TTN] = r.Problems[0].Kind
+	}
+	if kinds[contract.TTN(77)] != "unknown" || kinds[contract.TTN(1)] != "misrouted" {
+		t.Fatalf("%+v", rows)
+	}
+	if rec := act(t, e, lviv, contract.TTN(1), "redirect", ""); rec.Code != 200 {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	for _, r := range getProblems(t, e, lviv) {
+		if r.TTN == contract.TTN(1) {
+			t.Fatalf("still misrouted after redirect: %+v", r)
+		}
+	}
+	d.Sim.SetMode(context.Background(), sim.ModeAsIs)
+	if out, _ := scan(t, e, lviv, contract.TTN(78)); out.Outcome != "not_found" {
+		t.Fatalf("as is: %+v", out)
+	}
+}
+
+func TestScan_RateLimited(t *testing.T) {
+	d := testDeps(t)
+	e := NewServer(d)
+	op := operatorCookie(d, "branch-kharkiv-3")
+	for i := 0; i < 30; i++ {
+		if _, rec := scan(t, e, op, contract.TTN(500+i)); rec.Code != 200 {
+			t.Fatalf("scan %d: %d", i, rec.Code)
+		}
+	}
+	if _, rec := scan(t, e, op, contract.TTN(600)); rec.Code != 429 {
+		t.Fatalf("31st: %d", rec.Code)
+	}
+	var n int
+	d.Store.Pool.QueryRow(context.Background(), `SELECT count(*) FROM audit_log WHERE result='rate_limited' AND branch_id='branch-kharkiv-3'`).Scan(&n)
+	if n != 1 {
+		t.Fatalf("audit rows %d", n)
+	}
+	if _, rec := scan(t, e, operatorCookie(d, "branch-kyiv-12"), contract.TTN(601)); rec.Code != 200 {
+		t.Fatalf("other branch limited: %d", rec.Code)
+	}
+}
+
+func TestScan_InvalidTTN(t *testing.T) {
+	d := testDeps(t)
+	e := NewServer(d)
+	op := operatorCookie(d, "branch-kharkiv-3")
+	for _, bad := range []string{"123", "abc", "5900000000001x", ""} {
+		if _, rec := scan(t, e, op, bad); rec.Code != 400 {
+			t.Fatalf("%q: %d", bad, rec.Code)
+		}
+	}
+	for i := 0; i < 30; i++ {
+		if _, rec := scan(t, e, op, contract.TTN(500+i)); rec.Code != 200 {
+			t.Fatalf("limit consumed by invalid scans at %d: %d", i, rec.Code)
+		}
+	}
+}
+
+func TestOperatorEndpoints_RequireOperator(t *testing.T) {
+	d := testDeps(t)
+	e := NewServer(d)
+	if rec := do(e, jsonReq("GET", "/api/operator/problems", "")); rec.Code != 401 {
+		t.Fatal(rec.Code)
+	}
+	if rec := do(e, jsonReq("GET", "/api/operator/problems", "", sessionCookie(d, "senior", ""))); rec.Code != 403 {
+		t.Fatal(rec.Code)
+	}
+	if rec := do(e, jsonReq("GET", "/api/senior/problems", "", operatorCookie(d, "branch-kyiv-12"))); rec.Code != 403 {
+		t.Fatal(rec.Code)
+	}
+}
+
+func TestTrack_PhoneGatesDetails(t *testing.T) {
+	d := testDeps(t)
+	ctx := context.Background()
+	e := NewServer(d)
+	ingest(t, e, "ingest", scenario2Events())
+	d.Store.SaveNPStatus(ctx, []contract.TrackingStatus{{Number: contract.TTN(1), StatusCode: "6", Status: "У місті одержувача", ScheduledDeliveryDate: "18-10-2026 15:00:00"}}, time.Now())
+	rec := do(e, jsonReq("GET", "/api/track/"+contract.TTN(1)+"?phone=0991112233", ""))
+	if rec.Code != 200 || strings.Contains(rec.Body.String(), "details") || !strings.Contains(rec.Body.String(), `"isForecast":true`) {
+		t.Fatalf("wrong phone: %d %s", rec.Code, rec.Body)
+	}
+	rec = do(e, jsonReq("GET", "/api/track/"+contract.TTN(1)+"?phone=0670000001", ""))
+	if !strings.Contains(rec.Body.String(), `"details"`) || !strings.Contains(rec.Body.String(), `"eta":"2026-10-18T12:00:00Z"`) {
+		t.Fatalf("right phone: %s", rec.Body)
+	}
+	if rec := do(e, jsonReq("GET", "/api/track/"+contract.TTN(9), "")); rec.Code != 404 {
+		t.Fatal(rec.Code)
+	}
+	if rec := do(e, jsonReq("GET", "/api/track/abc", "")); rec.Code != 400 {
+		t.Fatal(rec.Code)
+	}
+}
+
+func TestReturn_RequiresReasonWithSolutionAndFlagsRisky(t *testing.T) {
+	d := testDeps(t)
+	e := NewServer(d)
+	op := operatorCookie(d, "branch-kyiv-12")
+	ingest(t, e, "ingest", scenario2Events())
+	d.Sim.Jump(context.Background(), t0.Add(5*time.Hour)) // broken chain (orange)
+	if rec := act(t, e, op, contract.TTN(1), "return", `{}`); rec.Code != 400 {
+		t.Fatalf("no reason: %d", rec.Code)
+	}
+	if rec := act(t, e, op, contract.TTN(1), "return", `{"reason":"other"}`); rec.Code != 400 {
+		t.Fatalf("other without comment: %d", rec.Code)
+	}
+	if rec := act(t, e, op, contract.TTN(1), "return", `{"reason":"damaged"}`); rec.Code != 200 {
+		t.Fatalf("damaged: %d %s", rec.Code, rec.Body)
+	}
+	if rec := act(t, e, op, contract.TTN(1), "explode", `{}`); rec.Code != 400 {
+		t.Fatalf("bad action: %d", rec.Code)
+	}
+	rows, code := getJSON[[]problemRow](t, e, "/api/senior/problems", sessionCookie(d, "senior", ""))
+	found := false
+	for _, r := range rows {
+		for _, p := range r.Problems {
+			found = found || (r.TTN == contract.TTN(1) && p.Kind == "risky_return")
+		}
+	}
+	if code != 200 || !found {
+		t.Fatalf("%d %+v", code, rows)
+	}
+}
+
+func TestSplit_ShowsClientAndOperatorViews(t *testing.T) {
+	d := testDeps(t)
+	ctx := context.Background()
+	e := NewServer(d)
+	ingest(t, e, "ingest", scenario2Events())
+	d.Store.SaveNPStatus(ctx, []contract.TrackingStatus{{Number: contract.TTN(1), StatusCode: "6", Status: "x", ScheduledDeliveryDate: "18-10-2026 15:00:00"}}, time.Now())
+	d.Sim.Jump(ctx, t0.Add(5*time.Hour))
+	d.Sim.SetMode(ctx, sim.ModeAsIs)
+	type split struct {
+		Client struct {
+			StatusCode string `json:"statusCode"`
+		} `json:"client"`
+		Operator struct {
+			VisibleInIncoming bool   `json:"visibleInIncoming"`
+			Level             string `json:"level"`
+		} `json:"operator"`
+	}
+	s, code := getJSON[split](t, e, "/api/sim/split/"+contract.TTN(1), adminCookie(d))
+	if code != 200 || s.Client.StatusCode != "6" || s.Operator.VisibleInIncoming || s.Operator.Level != "green" {
+		t.Fatalf("as is: %d %+v", code, s)
+	}
+	d.Sim.SetMode(ctx, sim.ModeWithSolution)
+	s, _ = getJSON[split](t, e, "/api/sim/split/"+contract.TTN(1), adminCookie(d))
+	if !s.Operator.VisibleInIncoming || s.Operator.Level != "orange" {
+		t.Fatalf("with solution: %+v", s)
+	}
+}
+
+func TestPhysical_ProxiesEmulator(t *testing.T) {
+	d := testDepsEmu(t, fakeEmulator(t, map[string][]string{"branch-kyiv-12": {contract.TTN(1)}}).URL)
+	e := NewServer(d)
+	rows, code := getJSON[[]string](t, e, "/api/operator/physical", operatorCookie(d, "branch-kyiv-12"))
+	if code != 200 || len(rows) != 1 {
+		t.Fatalf("%d %+v", code, rows)
+	}
+	d2 := testDepsEmu(t, "http://127.0.0.1:1")
+	if rec := do(NewServer(d2), jsonReq("GET", "/api/operator/physical", "", operatorCookie(d2, "branch-kyiv-12"))); rec.Code != 502 {
+		t.Fatalf("emulator down: %d", rec.Code)
+	}
+}

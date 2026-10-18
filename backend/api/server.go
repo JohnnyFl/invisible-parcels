@@ -38,5 +38,11 @@ func NewServer(d Deps) *echo.Echo {
 	sg.POST("/mode", simSetMode(d))
 	sg.POST("/reset", simReset(d))
 	sg.POST("/scenarios/:id", simScenario(d))
+	sg.GET("/split/:ttn", simSplit(d))
+	sg.GET("/physical", simPhysical(d))
+
+	registerOperator(e.Group("/api/operator", auth.Middleware(d.Cfg.AppSecret, "operator")), d)
+	registerSenior(e.Group("/api/senior", auth.Middleware(d.Cfg.AppSecret, "senior")), d)
+	e.GET("/api/track/:ttn", trackHandler(d))
 	return e
 }
