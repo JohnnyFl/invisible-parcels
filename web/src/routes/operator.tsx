@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Header } from "../components/Header";
 import { levelClass } from "../components/LevelBadge";
 import { ParcelTable } from "../components/ParcelTable";
 import { ScanDialog } from "../components/ScanDialog";
+import { TraceView } from "../components/TraceView";
 import { api, formatTime, formatTTN, type IncomingRow, type ProblemRow, type ShelfRow } from "../lib/api";
 import { requireRole } from "../lib/guard";
 import { useLocationName, useVirtualNow } from "../lib/queries";
@@ -24,6 +25,7 @@ function Operator() {
   const incoming = useQuery({ queryKey: ["incoming"], queryFn: () => api<IncomingRow[]>("/api/operator/incoming") });
   const physical = useQuery({ queryKey: ["physical"], queryFn: () => api<ShelfRow[]>("/api/operator/physical") });
   const [scanning, setScanning] = useState<string | null>(null);
+  const [tracing, setTracing] = useState<string | null>(null);
   const levelOf = new Map(problems.data?.map((r) => [r.ttn, r.level]));
   const unregistered = asIs ? 0 : (physical.data?.filter((r) => !r.registered).length ?? 0);
 
@@ -44,7 +46,7 @@ function Operator() {
           ) : problems.data?.length === 0 ? (
             <p className="border-y border-line bg-surface px-4 py-6 text-ink-2">Проблемних посилок немає. Усе, що прямує у відділення, є в списку надходжень.</p>
           ) : (
-            problems.data && <ParcelTable rows={problems.data} now={now} />
+            problems.data && <ParcelTable rows={problems.data} now={now} onTrace={setTracing} />
           )}
         </section>
 
@@ -115,10 +117,29 @@ function Operator() {
         </aside>
       </main>
       <ScanDialog ttn={scanning} mode={clock?.mode} onClose={() => setScanning(null)} />
+      <TraceDialog ttn={tracing} onClose={() => setTracing(null)} />
     </div>
   );
 }
 
 function Loading() {
   return <p className="border-y border-line bg-surface px-4 py-6 text-ink-2">Завантаження…</p>;
+}
+
+function TraceDialog({ ttn, onClose }: { ttn: string | null; onClose: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (ttn) ref.current?.showModal();
+  }, [ttn]);
+  return (
+    <dialog ref={ref} onClose={onClose} className="m-auto w-[min(36rem,calc(100vw-2rem))] rounded border border-line p-0 text-ink">
+      {ttn && (
+        <div className="p-5">
+          <p className="mb-2 text-sm text-ink-2">Де обірвався слід</p>
+          <TraceView ttn={ttn} base="/api/operator/trace" />
+          <button className="mt-5 rounded border border-line px-4 py-2 hover:bg-bg" onClick={() => ref.current?.close()}>Закрити</button>
+        </div>
+      )}
+    </dialog>
+  );
 }

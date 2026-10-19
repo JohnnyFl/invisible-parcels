@@ -23,6 +23,27 @@ export interface Split {
   operator: { branch?: string; visibleInIncoming: boolean; level: Level; problems: Problem[] };
   mode: Mode;
 }
+export type LegState = "done" | "in_transit" | "broken" | "incident" | "pending";
+export interface TraceLeg {
+  seq: number;
+  from: string;
+  to: string;
+  tripId: string;
+  plannedArrival: string;
+  loaded?: string;
+  departed?: string;
+  arrived?: string;
+  unloaded?: string;
+  state: LegState;
+}
+export interface Trace {
+  ttn: string;
+  destination?: string;
+  legs: TraceLeg[];
+  lastConfirmed?: { location: string; at: string; kind: string };
+  break?: { seq: number; hint: string };
+  delivered: boolean;
+}
 export interface ClockState { virtualNow: string; speed: number; mode: Mode }
 
 export class ApiError extends Error {

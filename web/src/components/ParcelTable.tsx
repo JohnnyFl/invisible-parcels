@@ -3,7 +3,7 @@ import { useLocationName } from "../lib/queries";
 import { LevelBadge, levelClass, problemHint, problemText } from "./LevelBadge";
 
 /** Problem list: a coloured rail per row, worst first (server sorts), with what to do. */
-export function ParcelTable({ rows, now, showBranch }: { rows: ProblemRow[]; now: Date; showBranch?: boolean }) {
+export function ParcelTable({ rows, now, showBranch, onTrace }: { rows: ProblemRow[]; now: Date; showBranch?: boolean; onTrace?: (ttn: string) => void }) {
   const name = useLocationName();
   return (
     <ul className="divide-y divide-line border-y border-line bg-surface">
@@ -17,6 +17,11 @@ export function ParcelTable({ rows, now, showBranch }: { rows: ProblemRow[]; now
               <span className="ttn text-lg font-semibold">{formatTTN(r.ttn)}</span>
               <LevelBadge level={r.level} />
               <span className="text-sm text-ink-2">{r.problems.map((p) => problemText[p.kind]).join(", ")}</span>
+              {onTrace && (
+                <button className="ml-auto rounded border border-line px-3 py-1 text-sm hover:bg-bg" onClick={() => onTrace(r.ttn)}>
+                  Де обірвався слід
+                </button>
+              )}
             </div>
             <p className="mt-1.5 max-w-prose">{problemHint[worst.kind]}</p>
             <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm">

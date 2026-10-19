@@ -10,7 +10,9 @@ export function useLocationName() {
   const { data } = useQuery(locationsQuery);
   return (id?: string) => {
     const l = data?.find((x) => x.id === id);
-    return l ? `${l.city}, ${l.name}` : (id ?? "");
+    // hubs already carry the city in their name: "Сортувальний центр Київ"
+    if (!l) return id ?? "";
+    return l.kind === "hub" ? l.name : `${l.city}, ${l.name}`;
   };
 }
 
