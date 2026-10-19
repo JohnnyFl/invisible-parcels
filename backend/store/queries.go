@@ -148,3 +148,30 @@ func (s *Store) RegisteredAt(ctx context.Context, branchID string, ttns []string
 	}
 	return out, err
 }
+
+// Task is an open "please look for this parcel" request for a branch.
+type Task struct {
+	TTN         string    `json:"ttn"`
+	RequestedAt time.Time `json:"requestedAt"`
+	Note        string    `json:"note"`
+}
+
+// OpenTasks: the latest check request per parcel at the branch, not yet answered there.
+func (s *Store) OpenTasks(ctx context.Context, branchID string) ([]Task, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT ttn, occurred_at, note FROM (
+		SELECT DISTINCT ON (r.ttn) r.ttn, r.occurred_at, r.received_at, COALESCE(r.payload->>'Note', '') AS note
+		FROM events r WHERE r.kind = 'check_requested' AND r.location_id = $1
+		ORDER BY r.ttn, r.occurred_at DESC, r.received_at DESC) req
+		WHERE NOT EXISTS (SELECT 1 FROM events a WHERE a.ttn = req.ttn AND a.location_id = $1
+			AND a.kind IN ('check_found', 'check_not_found')
+			AND (a.occurred_at, a.received_at) >= (req.occurred_at, req.received_at))
+		ORDER BY occurred_at`, branchID)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (Task, error) {
+		var t Task
+		err := r.Scan(&t.TTN, &t.RequestedAt, &t.Note)
+		return t, err
+	})
+}

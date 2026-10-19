@@ -18,6 +18,7 @@ import (
 	"novapost/backend/auth"
 	"novapost/backend/problems"
 	"novapost/backend/sim"
+	"novapost/backend/store"
 	"novapost/contract"
 )
 
@@ -27,6 +28,29 @@ type ProblemRow struct {
 	Problems    []problems.Problem `json:"problems"`
 	Destination string             `json:"destination"`
 	Location    string             `json:"location"`
+	Check       *CheckState        `json:"check,omitempty"` // senior view only
+}
+
+// CheckState is the latest "please look for it" request and its answer.
+type CheckState struct {
+	Status string    `json:"status"` // requested | found | not_found
+	Branch string    `json:"branch"`
+	At     time.Time `json:"at"`
+}
+
+func checkOf(evs []contract.Event) *CheckState {
+	var c *CheckState
+	for _, e := range evs {
+		switch e.Kind {
+		case contract.KindCheckRequested:
+			c = &CheckState{Status: "requested", Branch: e.LocationID, At: e.OccurredAt}
+		case contract.KindCheckFound:
+			c = &CheckState{Status: "found", Branch: e.LocationID, At: e.OccurredAt}
+		case contract.KindCheckNotFound:
+			c = &CheckState{Status: "not_found", Branch: e.LocationID, At: e.OccurredAt}
+		}
+	}
+	return c
 }
 
 // problemRows classifies TTNs and keeps the non-green ones, worst first, then oldest.
@@ -50,6 +74,9 @@ func problemRows(ctx context.Context, d Deps, ttns []string, withDestination boo
 		row := ProblemRow{TTN: in.TTN, Level: lvl, Problems: ps, Location: lastLocation(in.Events)}
 		if in.Parcel != nil && withDestination {
 			row.Destination = in.Parcel.DestinationID
+		}
+		if withDestination {
+			row.Check = checkOf(in.Events)
 		}
 		out = append(out, row)
 	}
@@ -109,19 +136,28 @@ func newEventID() string {
 	return "op-" + hex.EncodeToString(b)
 }
 
-// record writes an operator event to the journal and mirrors it into the NP world.
-func record(ctx context.Context, d Deps, kind, ttn, branch string, payload any) error {
-	e := contract.Event{EventID: newEventID(), Kind: kind, TTN: ttn, LocationID: branch, OccurredAt: d.Sim.Now(), Source: "operator"}
+// journal writes an event to the backend journal only (decisions, not movement).
+func journal(ctx context.Context, d Deps, source, kind, ttn, location string, payload any) (contract.Event, error) {
+	e := contract.Event{EventID: newEventID(), Kind: kind, TTN: ttn, LocationID: location, OccurredAt: d.Sim.Now(), Source: source}
 	if payload != nil {
 		e.Payload, _ = json.Marshal(payload)
 	}
 	if _, err := d.Store.InsertEvents(ctx, []contract.Event{e}, time.Now()); err != nil {
+		return e, err
+	}
+	d.Hub.Publish("problems", "incoming", "track", "physical", "tasks")
+	return e, nil
+}
+
+// record writes an operator scan/action to the journal and mirrors it into the NP world.
+func record(ctx context.Context, d Deps, kind, ttn, branch string, payload any) error {
+	e, err := journal(ctx, d, "operator", kind, ttn, branch, payload)
+	if err != nil {
 		return err
 	}
 	if err := d.Emu.OperatorEvent(ctx, e); err != nil {
 		log.Printf("emulator: operator event not mirrored: %v", err)
 	}
-	d.Hub.Publish("problems", "incoming", "track", "physical")
 	return nil
 }
 
@@ -191,6 +227,45 @@ func registerOperator(g *echo.Group, d Deps) {
 			return notFound(c)
 		}
 		return c.JSON(http.StatusOK, tr)
+	})
+
+	g.GET("/tasks", func(c *echo.Context) error {
+		tasks, err := d.Store.OpenTasks(c.Request().Context(), auth.FromContext(c).BranchID)
+		if err != nil {
+			return err
+		}
+		return c.JSON(http.StatusOK, nonNil(tasks))
+	})
+
+	g.POST("/tasks/:ttn/answer", func(c *echo.Context) error {
+		ttn := c.Param("ttn")
+		if !contract.TTNPattern.MatchString(ttn) {
+			return badTTN(c)
+		}
+		var req struct {
+			Found bool `json:"found"`
+		}
+		if err := c.Bind(&req); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid body")
+		}
+		ctx := c.Request().Context()
+		s := auth.FromContext(c)
+		tasks, err := d.Store.OpenTasks(ctx, s.BranchID)
+		if err != nil {
+			return err
+		}
+		if !slices.ContainsFunc(tasks, func(t store.Task) bool { return t.TTN == ttn }) {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "Доручення не знайдено"})
+		}
+		kind := contract.KindCheckNotFound
+		if req.Found {
+			kind = contract.KindCheckFound
+		}
+		if _, err := journal(ctx, d, "operator", kind, ttn, s.BranchID, nil); err != nil {
+			return err
+		}
+		d.Store.Audit(ctx, time.Now(), s.Role, s.BranchID, "check_answer", ttn, kind)
+		return c.JSON(http.StatusOK, map[string]string{"result": "ok"})
 	})
 
 	g.GET("/incoming", func(c *echo.Context) error {

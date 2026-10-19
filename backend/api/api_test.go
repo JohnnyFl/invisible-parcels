@@ -711,3 +711,109 @@ func TestSimRandomParcels_StartsTimeAndPassesListThrough(t *testing.T) {
 		t.Fatalf("emulator down: %d", rec.Code)
 	}
 }
+
+type rowWithCheck struct {
+	TTN      string `json:"ttn"`
+	Problems []struct {
+		Kind string `json:"kind"`
+	} `json:"problems"`
+	Check *struct {
+		Status string `json:"status"`
+		Branch string `json:"branch"`
+	} `json:"check"`
+}
+
+func seniorRow(t *testing.T, e http.Handler, d Deps, ttn string) rowWithCheck {
+	t.Helper()
+	rows, _ := getJSON[[]rowWithCheck](t, e, "/api/senior/problems", sessionCookie(d, "senior", ""))
+	for _, r := range rows {
+		if r.TTN == ttn {
+			return r
+		}
+	}
+	t.Fatalf("%s not in senior list: %+v", ttn, rows)
+	return rowWithCheck{}
+}
+
+func TestSeniorCheck_RoundTripToOperator(t *testing.T) {
+	mirrored := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/admin/operator-event" {
+			mirrored++
+		}
+		w.WriteHeader(204)
+	}))
+	defer srv.Close()
+	d := testDepsEmu(t, srv.URL)
+	e := NewServer(d)
+	ingest(t, e, "ingest", scenario2Events())
+	d.Sim.Jump(context.Background(), t0.Add(5*time.Hour))
+	senior, kyiv, lviv := sessionCookie(d, "senior", ""), operatorCookie(d, "branch-kyiv-12"), operatorCookie(d, "branch-lviv-5")
+
+	if rec := do(e, jsonReq("POST", "/api/senior/parcels/"+contract.TTN(1)+"/check", `{"branchId":"hub-kyiv"}`, senior)); rec.Code != 400 {
+		t.Fatalf("hub is not a branch: %d", rec.Code)
+	}
+	if rec := do(e, jsonReq("POST", "/api/senior/parcels/"+contract.TTN(1)+"/check", `{"branchId":"branch-kyiv-12","note":"полиця 3"}`, senior)); rec.Code != 200 {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	if r := seniorRow(t, e, d, contract.TTN(1)); r.Check == nil || r.Check.Status != "requested" || r.Check.Branch != "branch-kyiv-12" {
+		t.Fatalf("%+v", r.Check)
+	}
+	type task struct {
+		TTN  string `json:"ttn"`
+		Note string `json:"note"`
+	}
+	if tasks, _ := getJSON[[]task](t, e, "/api/operator/tasks", kyiv); len(tasks) != 1 || tasks[0].TTN != contract.TTN(1) || tasks[0].Note != "полиця 3" {
+		t.Fatalf("%+v", tasks)
+	}
+	if tasks, _ := getJSON[[]task](t, e, "/api/operator/tasks", lviv); len(tasks) != 0 {
+		t.Fatalf("other branch got the task: %+v", tasks)
+	}
+	if rec := do(e, jsonReq("POST", "/api/operator/tasks/"+contract.TTN(1)+"/answer", `{"found":false}`, lviv)); rec.Code != 404 {
+		t.Fatalf("answer without a task: %d", rec.Code)
+	}
+	if rec := do(e, jsonReq("POST", "/api/operator/tasks/"+contract.TTN(1)+"/answer", `{"found":false}`, kyiv)); rec.Code != 200 {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	if tasks, _ := getJSON[[]task](t, e, "/api/operator/tasks", kyiv); len(tasks) != 0 {
+		t.Fatalf("answered task still open: %+v", tasks)
+	}
+	if r := seniorRow(t, e, d, contract.TTN(1)); r.Check == nil || r.Check.Status != "not_found" {
+		t.Fatalf("%+v", r.Check)
+	}
+	if mirrored != 0 {
+		t.Fatalf("management events must not reach the NP world, got %d", mirrored)
+	}
+}
+
+func TestSeniorConfirmReturn_ClearsRiskyReturn(t *testing.T) {
+	d := testDeps(t)
+	e := NewServer(d)
+	ingest(t, e, "ingest", scenario2Events())
+	d.Sim.Jump(context.Background(), t0.Add(5*time.Hour))
+	act(t, e, operatorCookie(d, "branch-kyiv-12"), contract.TTN(1), "return", `{"reason":"damaged"}`)
+	senior := sessionCookie(d, "senior", "")
+	hasRisky := func() bool {
+		for _, p := range seniorRow(t, e, d, contract.TTN(1)).Problems {
+			if p.Kind == "risky_return" {
+				return true
+			}
+		}
+		return false
+	}
+	if !hasRisky() {
+		t.Fatal("precondition: risky return")
+	}
+	if rec := do(e, jsonReq("POST", "/api/senior/parcels/"+contract.TTN(1)+"/confirm-return", `{"comment":""}`, senior)); rec.Code != 400 {
+		t.Fatalf("empty comment: %d", rec.Code)
+	}
+	if rec := do(e, jsonReq("POST", "/api/senior/parcels/"+contract.TTN(1)+"/confirm-return", `{"comment":"Пошкоджена, повертаємо відправнику"}`, senior)); rec.Code != 200 {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	if hasRisky() {
+		t.Fatal("risky return still shown after confirmation")
+	}
+	if rec := do(e, jsonReq("POST", "/api/senior/parcels/"+contract.TTN(1)+"/confirm-return", `{"comment":"x"}`, operatorCookie(d, "branch-kyiv-12"))); rec.Code != 403 {
+		t.Fatalf("operator: %d", rec.Code)
+	}
+}
