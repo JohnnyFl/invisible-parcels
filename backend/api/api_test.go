@@ -759,6 +759,10 @@ func TestSeniorCheck_RoundTripToOperator(t *testing.T) {
 	if r := seniorRow(t, e, d, contract.TTN(1)); r.Check == nil || r.Check.Status != "requested" || r.Check.Branch != "branch-kyiv-12" {
 		t.Fatalf("%+v", r.Check)
 	}
+	rows, _ := getJSON[[]problemRow](t, e, "/api/senior/problems", senior)
+	if rows[0].Location != "hub-kyiv" {
+		t.Fatalf("a check request is not where the parcel is: %q", rows[0].Location)
+	}
 	type task struct {
 		TTN  string `json:"ttn"`
 		Note string `json:"note"`

@@ -1,9 +1,22 @@
+import type { ReactNode } from "react";
 import { formatAgo, formatTTN, type ProblemRow } from "../lib/api";
 import { useLocationName } from "../lib/queries";
 import { LevelBadge, levelClass, problemHint, problemText } from "./LevelBadge";
 
 /** Problem list: a coloured rail per row, worst first (server sorts), with what to do. */
-export function ParcelTable({ rows, now, showBranch, onTrace }: { rows: ProblemRow[]; now: Date; showBranch?: boolean; onTrace?: (ttn: string) => void }) {
+export function ParcelTable({
+  rows,
+  now,
+  showBranch,
+  onTrace,
+  extra,
+}: {
+  rows: ProblemRow[];
+  now: Date;
+  showBranch?: boolean;
+  onTrace?: (ttn: string) => void;
+  extra?: (r: ProblemRow) => ReactNode;
+}) {
   const name = useLocationName();
   return (
     <ul className="divide-y divide-line border-y border-line bg-surface">
@@ -40,6 +53,7 @@ export function ParcelTable({ rows, now, showBranch, onTrace }: { rows: ProblemR
                 </div>
               )}
             </dl>
+            {extra?.(r)}
           </li>
         );
       })}

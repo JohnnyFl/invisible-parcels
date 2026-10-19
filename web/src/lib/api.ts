@@ -6,7 +6,9 @@ export type Mode = "as_is" | "with_solution";
 export interface Me { role: Role; branchId?: string }
 export interface Location { id: string; kind: "branch" | "hub"; city: string; name: string }
 export interface Problem { kind: ProblemKind; severity: Level; since: string }
-export interface ProblemRow { ttn: string; level: Level; problems: Problem[]; destination: string; location: string }
+export interface CheckState { status: "requested" | "found" | "not_found"; branch: string; at: string }
+export interface ProblemRow { ttn: string; level: Level; problems: Problem[]; destination: string; location: string; check?: CheckState }
+export interface Task { ttn: string; requestedAt: string; note: string }
 export interface ShelfRow { ttn: string; registered: boolean }
 export interface IncomingRow { ttn: string; from: string; tripId: string; eta: string }
 export interface ScanResult { outcome: "accept" | "redirect" | "hold" | "not_found"; nextLocation?: string }

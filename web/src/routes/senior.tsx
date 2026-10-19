@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { Header } from "../components/Header";
 import { LevelBadge } from "../components/LevelBadge";
 import { ParcelTable } from "../components/ParcelTable";
+import { SeniorActionDialog, SeniorRowActions, type SeniorAction } from "../components/SeniorActions";
 import { TraceView } from "../components/TraceView";
 import { api, type Level, type ProblemRow } from "../lib/api";
 import { requireRole } from "../lib/guard";
@@ -24,6 +25,7 @@ function Senior() {
   const [filter, setFilter] = useState<Level | null>(null);
   const [query, setQuery] = useState("");
   const [traced, setTraced] = useState<string | null>(null);
+  const [action, setAction] = useState<SeniorAction | null>(null);
   const trace = (ttn: string) => {
     setQuery(ttn);
     setTraced(ttn);
@@ -76,11 +78,21 @@ function Senior() {
             ) : rows.length === 0 ? (
               <p className="border-y border-line bg-surface px-4 py-6 text-ink-2">Проблемних посилок немає.</p>
             ) : (
-              <ParcelTable rows={rows} now={now} showBranch onTrace={(ttn) => { trace(ttn); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
+              <ParcelTable
+                rows={rows}
+                now={now}
+                showBranch
+                onTrace={(ttn) => {
+                  trace(ttn);
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                extra={(r) => <SeniorRowActions row={r} onAction={setAction} />}
+              />
             )}
           </>
         )}
       </main>
+      <SeniorActionDialog action={action} onClose={() => setAction(null)} />
     </div>
   );
 }

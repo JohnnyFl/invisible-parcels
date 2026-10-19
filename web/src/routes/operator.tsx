@@ -1,12 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Header } from "../components/Header";
 import { levelClass } from "../components/LevelBadge";
 import { ParcelTable } from "../components/ParcelTable";
 import { ScanDialog } from "../components/ScanDialog";
 import { TraceView } from "../components/TraceView";
-import { api, formatTime, formatTTN, type IncomingRow, type ProblemRow, type ShelfRow } from "../lib/api";
+import { api, formatTime, formatTTN, type IncomingRow, type ProblemRow, type ShelfRow, type Task } from "../lib/api";
 import { requireRole } from "../lib/guard";
 import { useLocationName, useVirtualNow } from "../lib/queries";
 import { useInvalidateStream } from "../lib/useInvalidateStream";
@@ -33,6 +33,8 @@ function Operator() {
     <div className="min-h-screen">
       <Header />
       <main className="mx-auto grid max-w-7xl gap-8 px-4 py-6 lg:grid-cols-[1fr_22rem]">
+        <div className="space-y-8">
+        <Tasks onScan={setScanning} />
         <section aria-labelledby="problems-h">
           <h1 id="problems-h" className="mb-3 text-xl font-semibold">
             Проблемні посилки {problems.data && !asIs && <span className="font-normal text-ink-2">({problems.data.length})</span>}
@@ -49,6 +51,7 @@ function Operator() {
             problems.data && <ParcelTable rows={problems.data} now={now} onTrace={setTracing} />
           )}
         </section>
+        </div>
 
         <aside className="space-y-8">
           <section aria-labelledby="shelf-h">
@@ -141,5 +144,49 @@ function TraceDialog({ ttn, onClose }: { ttn: string | null; onClose: () => void
         </div>
       )}
     </dialog>
+  );
+}
+
+/** Requests from the senior shift to look for a parcel at this branch. */
+function Tasks({ onScan }: { onScan: (ttn: string) => void }) {
+  const qc = useQueryClient();
+  const { data } = useQuery({ queryKey: ["tasks"], queryFn: () => api<Task[]>("/api/operator/tasks") });
+  const answer = useMutation({
+    mutationFn: ({ ttn, found }: { ttn: string; found: boolean }) => api(`/api/operator/tasks/${ttn}/answer`, { method: "POST", json: { found } }),
+    onSuccess: (_, { ttn, found }) => {
+      qc.invalidateQueries();
+      if (found) onScan(ttn); // found it: scan it right away so the system sees it
+    },
+  });
+  if (!data?.length) return null;
+  return (
+    <section aria-labelledby="tasks-h">
+      <h2 id="tasks-h" className="mb-3 text-xl font-semibold">
+        Доручення від старшої зміни <span className="font-normal text-ink-2">({data.length})</span>
+      </h2>
+      <ul className="divide-y divide-line border-y border-line bg-surface">
+        {data.map((t) => (
+          <li key={t.ttn} className="relative flex flex-wrap items-center gap-x-4 gap-y-2 py-3 pl-5 pr-4">
+            <span className="absolute inset-y-0 left-0 w-1.5 bg-ink" aria-hidden />
+            <div className="min-w-0 flex-1">
+              <p>
+                Знайдіть посилку <span className="ttn font-semibold">{formatTTN(t.ttn)}</span>
+              </p>
+              <p className="text-sm text-ink-2">
+                {t.note ? `${t.note}. ` : ""}Доручено {formatTime(t.requestedAt)}.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button className="rounded bg-brand px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-dark disabled:opacity-50" disabled={answer.isPending} onClick={() => answer.mutate({ ttn: t.ttn, found: true })}>
+                Знайдено — сканувати
+              </button>
+              <button className="rounded border border-line px-3 py-1.5 text-sm hover:bg-bg disabled:opacity-50" disabled={answer.isPending} onClick={() => answer.mutate({ ttn: t.ttn, found: false })}>
+                Не знайдено
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

@@ -149,6 +149,11 @@ nova_post/
 | `incident` | рейс або локація | `TripId` або `LocationId`, `Cause` |
 | `operator_scan` | посилка | (лише `source = "operator"`) скан у відділенні; ТТН може бути невідомою |
 | `hold` | посилка | (лише `source = "operator"`) «На ідентифікації» |
+| `check_requested` | посилка | (`source = "senior"`) доручення відділенню `LocationId` знайти посилку; `Note` |
+| `check_found` / `check_not_found` | посилка | (`source = "operator"`) відповідь відділення на доручення |
+| `return_confirmed` | посилка | (`source = "senior"`) повернення обґрунтоване; `Comment`. Знімає `risky_return` |
+
+`check_*` і `return_confirmed` — службові події: вони не передаються в емулятор, а класифікатор не вважає їх рухом посилки (не скидають «Застигла»).
 
 Правила прийому:
 - **Ідемпотентність**: `event_id` є первинним ключем, дубль ігнорується (`ON CONFLICT DO NOTHING`), відповідь 200.
@@ -246,6 +251,10 @@ EscalateYellow    = 24 * time.Hour  // 🟡 → 🟠
 | `POST /api/operator/scan` | operator | пошук невідомої посилки |
 | `POST /api/operator/parcels/{ttn}/{action}` | operator | accept / redirect / hold / return |
 | `GET /api/senior/problems` | senior | проблемні посилки всіх відділень, ризикові повернення |
+| `POST /api/senior/parcels/{ttn}/check` | senior | `{branchId, note?}`: доручити перевірку відділенню |
+| `POST /api/senior/parcels/{ttn}/confirm-return` | senior | `{comment}` (обов'язково): підтвердити ризикове повернення |
+| `GET /api/operator/tasks` | operator | відкриті доручення для відділення |
+| `POST /api/operator/tasks/{ttn}/answer` | operator | `{found}`: відповідь на доручення; без відкритого доручення 404 |
 | `GET /api/senior/trace/{ttn}` | senior | «Де обірвався слід»: маршрут за планом поруч із фактичними сканами (§12а) |
 | `GET /api/operator/trace/{ttn}` | operator | те саме, але лише для посилок, які відділення вже бачить (адресовані йому, у маршруті через нього, востаннє бачені в ньому); інакше 404; кожен запит в `audit_log` |
 | `POST /api/sim/accept/{ttn}` | admin | для туру «Показати кейс»: оператор приймає посилку у відділенні призначення |

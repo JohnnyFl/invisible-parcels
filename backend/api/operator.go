@@ -98,7 +98,7 @@ func oldest(r ProblemRow) time.Time {
 
 func lastLocation(evs []contract.Event) string {
 	for i := len(evs) - 1; i >= 0; i-- {
-		if evs[i].TTN != "" && evs[i].LocationID != "" {
+		if evs[i].TTN != "" && evs[i].LocationID != "" && !contract.IsManagement(evs[i].Kind) {
 			return evs[i].LocationID
 		}
 	}
