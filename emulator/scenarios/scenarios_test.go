@@ -119,3 +119,19 @@ func TestBackgroundParcelsArrive(t *testing.T) {
 		t.Fatalf("%+v", st)
 	}
 }
+
+// Background parcels must never look "stuck" (12h without events) on their way.
+func TestBackground_NoGapLongerThanStuckThreshold(t *testing.T) {
+	facts, _ := Build(2)
+	last := map[string]time.Time{}
+	for _, f := range facts {
+		e := f.Event
+		if e.TTN < contract.TTN(100) || e.TTN > contract.TTN(124) {
+			continue
+		}
+		if prev, ok := last[e.TTN]; ok && e.OccurredAt.Sub(prev) >= 12*time.Hour {
+			t.Fatalf("%s: %v gap before %s", e.TTN, e.OccurredAt.Sub(prev), e.Kind)
+		}
+		last[e.TTN] = e.OccurredAt
+	}
+}

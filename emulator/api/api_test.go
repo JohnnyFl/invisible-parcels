@@ -28,7 +28,7 @@ func TestGetStatusDocuments(t *testing.T) {
 	w.Load(facts)
 	clk := &ClockHolder{}
 	clk.Set(contract.Clock{VirtualBase: scenarios.Start.Add(48 * time.Hour)})
-	srv := httptest.NewServer(NewServer(w, clk, func(f func()) { f() }))
+	srv := httptest.NewServer(NewServer(w, clk, func(f func()) { f() }, func(time.Time) {}))
 	defer srv.Close()
 	body := `{"apiKey":"demo","modelName":"TrackingDocument","calledMethod":"getStatusDocuments","methodProperties":{"Documents":[{"DocumentNumber":"59000000000001","Phone":""},{"DocumentNumber":"59999999999999","Phone":""}]}}`
 	var r contract.Response[contract.TrackingStatus]
@@ -39,7 +39,7 @@ func TestGetStatusDocuments(t *testing.T) {
 }
 
 func TestGetStatusDocuments_RejectsOtherMethodsAndTooMany(t *testing.T) {
-	srv := httptest.NewServer(NewServer(world.New(), &ClockHolder{}, func(f func()) { f() }))
+	srv := httptest.NewServer(NewServer(world.New(), &ClockHolder{}, func(f func()) { f() }, func(time.Time) {}))
 	defer srv.Close()
 	var r contract.Response[contract.TrackingStatus]
 	json.NewDecoder(post(t, srv.URL+"/v2.0/json/", `{"modelName":"Address","calledMethod":"getCities","methodProperties":{}}`).Body).Decode(&r)
@@ -59,7 +59,7 @@ func TestAdmin_ScenarioClockPhysicalOperatorEvent(t *testing.T) {
 	w := world.New()
 	clk := &ClockHolder{}
 	cleared := false
-	srv := httptest.NewServer(NewServer(w, clk, func(f func()) { f(); cleared = true }))
+	srv := httptest.NewServer(NewServer(w, clk, func(f func()) { f(); cleared = true }, func(time.Time) {}))
 	defer srv.Close()
 	if resp := post(t, srv.URL+"/admin/scenarios/2", ``); resp.StatusCode != 200 || !cleared {
 		t.Fatalf("scenario: %d cleared=%v", resp.StatusCode, cleared)
@@ -85,7 +85,7 @@ func TestAdmin_ScenarioClockPhysicalOperatorEvent(t *testing.T) {
 }
 
 func TestAdmin_StateReportsLoadedScenario(t *testing.T) {
-	srv := httptest.NewServer(NewServer(world.New(), &ClockHolder{}, func(f func()) { f() }))
+	srv := httptest.NewServer(NewServer(world.New(), &ClockHolder{}, func(f func()) { f() }, func(time.Time) {}))
 	defer srv.Close()
 	state := func() int {
 		resp, _ := http.Get(srv.URL + "/admin/state")
@@ -105,5 +105,16 @@ func TestAdmin_StateReportsLoadedScenario(t *testing.T) {
 	post(t, srv.URL+"/admin/reset", ``)
 	if got := state(); got != 0 {
 		t.Fatalf("after reset: %d", got)
+	}
+}
+
+func TestAdmin_ClockFlushesDueEventsBeforeReplying(t *testing.T) {
+	var flushedAt time.Time
+	srv := httptest.NewServer(NewServer(world.New(), &ClockHolder{}, func(f func()) { f() }, func(now time.Time) { flushedAt = now }))
+	defer srv.Close()
+	vt := scenarios.Start.Add(30 * time.Hour)
+	post(t, srv.URL+"/admin/clock", `{"virtualNow":"`+vt.Format(time.RFC3339)+`","speed":0}`)
+	if !flushedAt.Equal(vt) {
+		t.Fatalf("flushed at %v, want %v", flushedAt, vt)
 	}
 }

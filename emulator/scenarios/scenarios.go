@@ -88,7 +88,7 @@ func (b *builder) moveLeg(ttn string, t trip, hideLoad, hideUnload bool) {
 func route(id string, origin, dest string, offset float64) []trip {
 	return []trip{
 		{id + "-1", origin, hubOf[origin], 2 + offset, 4 + offset},
-		{id + "-2", hubOf[origin], hubOf[dest], 6 + offset, 18 + offset},
+		{id + "-2", hubOf[origin], hubOf[dest], 6 + offset, 16 + offset}, // < StuckAfter (12h), or parcels look stuck mid-way
 		{id + "-3", hubOf[dest], dest, 20 + offset, 22 + offset},
 	}
 }
@@ -121,11 +121,11 @@ func (b *builder) background() {
 // The last leg is planned for tomorrow 15:00 Kyiv time, but actually arrives at 22h (early).
 var focusTrips = []trip{
 	{"trip-f1", "branch-kharkiv-3", "hub-kharkiv", 2, 4},
-	{"trip-f2", "hub-kharkiv", "hub-kyiv", 6, 18},
+	{"trip-f2", "hub-kharkiv", "hub-kyiv", 6, 16},
 	{"trip-f3", "hub-kyiv", "branch-kyiv-12", 20, 22},
 }
 
-var focusPlan = [][2]float64{{2, 4}, {6, 18}, {26, 28}}
+var focusPlan = [][2]float64{{2, 4}, {6, 16}, {26, 28}}
 
 // Build returns the facts of scenario id (1..5).
 func Build(id int) ([]world.Fact, error) {

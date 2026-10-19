@@ -37,8 +37,8 @@ func (h *ClockHolder) Now() time.Time { return h.Get().Now(time.Now()) }
 const maxDocuments = 100
 
 // NewServer wires the routes. reset(load) must run load (replace the world) and
-// drop queued pushes atomically.
-func NewServer(w *world.World, clk *ClockHolder, reset func(load func())) *echo.Echo {
+// drop queued pushes atomically; flush(now) pushes everything due by now.
+func NewServer(w *world.World, clk *ClockHolder, reset func(load func()), flush func(now time.Time)) *echo.Echo {
 	e := echo.New()
 	var scenario atomic.Int32 // what is loaded now, so the backend can tell we restarted
 
@@ -74,6 +74,7 @@ func NewServer(w *world.World, clk *ClockHolder, reset func(load func())) *echo.
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
 		clk.Set(contract.Clock{RealBase: time.Now(), VirtualBase: req.VirtualNow, Speed: req.Speed})
+		flush(req.VirtualNow)
 		return c.NoContent(http.StatusNoContent)
 	})
 

@@ -31,5 +31,5 @@ func main() {
 		Client: &http.Client{Timeout: 5 * time.Second},
 	}
 	go p.Run(context.Background(), w, clk.Now)
-	log.Fatal(api.NewServer(w, clk, p.Reset).Start(":" + env("PORT", "8090")))
+	log.Fatal(api.NewServer(w, clk, p.Reset, func(now time.Time) { p.Flush(context.Background(), w, now) }).Start(":" + env("PORT", "8090")))
 }

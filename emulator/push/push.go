@@ -105,3 +105,23 @@ func (p *Pusher) tick(ctx context.Context, w *world.World, now func() time.Time)
 		p.mu.Unlock()
 	}
 }
+
+// Flush sends everything due by now in one batch, without the hold-back, before
+// returning — so after a clock jump the backend has all events before it redraws.
+func (p *Pusher) Flush(ctx context.Context, w *world.World, now time.Time) {
+	p.sending.Lock()
+	defer p.sending.Unlock()
+	p.mu.Lock()
+	send := append(p.pending, w.Due(now)...)
+	p.pending = nil
+	p.mu.Unlock()
+	if len(send) == 0 {
+		return
+	}
+	if err := p.Send(ctx, send); err != nil {
+		log.Printf("push: flush: %v (will retry %d events)", err, len(send))
+		p.mu.Lock()
+		p.pending = append(p.pending, send...)
+		p.mu.Unlock()
+	}
+}

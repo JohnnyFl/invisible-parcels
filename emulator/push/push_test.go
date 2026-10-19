@@ -65,3 +65,24 @@ func TestReset_WaitsForInFlightSend(t *testing.T) {
 	}
 	<-finished
 }
+
+func TestFlush_SendsEverythingDueAtOnce(t *testing.T) {
+	var got contract.Envelope[contract.EventBatch]
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		json.NewDecoder(r.Body).Decode(&got)
+	}))
+	defer srv.Close()
+	w := world.New()
+	var facts []world.Fact
+	for i := range 10 {
+		facts = append(facts, world.Fact{Event: contract.Event{EventID: contract.TTN(i), Kind: contract.KindCreated, OccurredAt: time.Unix(int64(i), 0)}})
+	}
+	w.Load(facts)
+	p := &Pusher{URL: srv.URL, Secret: "s", Client: srv.Client()}
+	p.Flush(context.Background(), w, time.Unix(100, 0))
+	if calls != 1 || len(got.MethodProperties.Events) != 10 {
+		t.Fatalf("calls=%d events=%d", calls, len(got.MethodProperties.Events))
+	}
+}
