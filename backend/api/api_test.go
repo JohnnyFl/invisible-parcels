@@ -651,3 +651,32 @@ func TestSimAccept_OperatorAcceptsAtDestination(t *testing.T) {
 		t.Fatalf("operator: %d", rec.Code)
 	}
 }
+
+func TestTrace_SeniorSeesAnyOperatorOnlyOwnBranch(t *testing.T) {
+	d := testDeps(t)
+	e := NewServer(d)
+	ingest(t, e, "ingest", scenario2Events())
+	type trace struct {
+		Legs  []struct{ State string } `json:"legs"`
+		Break *struct {
+			Seq  int    `json:"seq"`
+			Hint string `json:"hint"`
+		} `json:"break"`
+	}
+	tr, code := getJSON[trace](t, e, "/api/senior/trace/"+contract.TTN(1), sessionCookie(d, "senior", ""))
+	if code != 200 || len(tr.Legs) != 1 || tr.Legs[0].State != "broken" || tr.Break == nil || !strings.Contains(tr.Break.Hint, "Київ, Відділення №12") {
+		t.Fatalf("%d %+v", code, tr)
+	}
+	if _, code := getJSON[trace](t, e, "/api/operator/trace/"+contract.TTN(1), operatorCookie(d, "branch-kyiv-12")); code != 200 {
+		t.Fatalf("own branch: %d", code)
+	}
+	if _, code := getJSON[trace](t, e, "/api/operator/trace/"+contract.TTN(1), operatorCookie(d, "branch-lviv-5")); code != 404 {
+		t.Fatalf("other branch must not see the route: %d", code)
+	}
+	if _, code := getJSON[trace](t, e, "/api/senior/trace/"+contract.TTN(9), sessionCookie(d, "senior", "")); code != 404 {
+		t.Fatalf("unknown: %d", code)
+	}
+	if _, code := getJSON[trace](t, e, "/api/senior/trace/abc", sessionCookie(d, "senior", "")); code != 400 {
+		t.Fatalf("invalid: %d", code)
+	}
+}

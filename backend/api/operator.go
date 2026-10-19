@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"slices"
@@ -163,6 +164,33 @@ func registerOperator(g *echo.Group, d Deps) {
 			return err
 		}
 		return c.JSON(http.StatusOK, rows)
+	})
+
+	// An operator may trace only parcels addressed to, routed through or seen at their
+	// branch — the same set they already see — so the route of others' parcels stays hidden (§8).
+	g.GET("/trace/:ttn", func(c *echo.Context) error {
+		ttn := c.Param("ttn")
+		if !contract.TTNPattern.MatchString(ttn) {
+			return badTTN(c)
+		}
+		ctx := c.Request().Context()
+		s := auth.FromContext(c)
+		mine, err := d.Store.BranchTTNs(ctx, s.BranchID)
+		if err != nil {
+			return err
+		}
+		d.Store.Audit(ctx, time.Now(), s.Role, s.BranchID, "trace", ttn, fmt.Sprint(slices.Contains(mine, ttn)))
+		if !slices.Contains(mine, ttn) {
+			return notFound(c)
+		}
+		tr, ok, err := traceOf(ctx, d, ttn)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return notFound(c)
+		}
+		return c.JSON(http.StatusOK, tr)
 	})
 
 	g.GET("/incoming", func(c *echo.Context) error {
