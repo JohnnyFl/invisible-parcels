@@ -37,7 +37,7 @@ cp .env.example .env
 
 - `SITE_ADDRESS` — ваш домен, наприклад `nova-post.duckdns.org`;
 - `APP_SECRET` і `INGEST_SECRET` — випадкові рядки;
-- `ADMIN_PASSWORD`, `SENIOR_PASSWORD`, `OPERATOR_PASSWORD` — паролі, які ви надішлете людям з НП.
+- `ADMIN_PASSWORD`, `SENIOR_PASSWORD`, `OPERATOR_PASSWORD` — паролі ролей. Вони опубліковані в README (`demo`), тож якщо змінюєте їх, оновіть і README. Ніде більше ці паролі не використовуйте.
 
 Випадковий рядок можна згенерувати так:
 
@@ -45,7 +45,7 @@ cp .env.example .env
 openssl rand -hex 32
 ```
 
-Якщо якесь значення лишиться типовим, backend напише в лог `WARNING: default values in use for …`.
+`APP_SECRET` і `INGEST_SECRET` ніколи не публікуйте: перший підписує сесії входу, другий захищає вебхук подій. Якщо якесь значення лишиться типовим, backend напише в лог `WARNING: default values in use for …`.
 
 ## 4. Запуск
 
