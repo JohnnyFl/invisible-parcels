@@ -140,8 +140,9 @@ func Classify(in Input) []Problem {
 	redirected := !redirectedAt.IsZero()
 	if !redirected {
 		for _, l := range in.Legs {
-			if at, ok := tripArrived[l.TripID]; ok && l.TripID != "" && !unloadedAt[l.ToID] {
-				add(BrokenChain, Orange, at)
+			// scans arrive late and out of order (and unloading takes time): give it UnloadGrace
+			if at, ok := tripArrived[l.TripID]; ok && l.TripID != "" && !unloadedAt[l.ToID] && in.Now.After(at.Add(UnloadGrace)) {
+				add(BrokenChain, Orange, at.Add(UnloadGrace))
 				break
 			}
 		}

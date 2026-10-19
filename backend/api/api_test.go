@@ -245,12 +245,12 @@ func TestCase_HiddenUnload_BecomesOrangeThenRed(t *testing.T) {
 	e := NewServer(d)
 	op := operatorCookie(d, "branch-kyiv-12")
 	ingest(t, e, "ingest", scenario2Events()) // trip arrived at t0+4h, no unload reported
-	d.Sim.Jump(ctx, t0.Add(5*time.Hour))
+	d.Sim.Jump(ctx, t0.Add(5*time.Hour+30*time.Minute))
 	rows := getProblems(t, e, op)
 	if len(rows) != 1 || rows[0].Level != "orange" || rows[0].Problems[0].Kind != "broken_chain" || rows[0].TTN != contract.TTN(1) {
 		t.Fatalf("%+v", rows)
 	}
-	d.Sim.Jump(ctx, t0.Add(10*time.Hour+time.Minute))
+	d.Sim.Jump(ctx, t0.Add(11*time.Hour+time.Minute))
 	if rows := getProblems(t, e, op); len(rows) != 1 || rows[0].Level != "red" {
 		t.Fatalf("%+v", rows)
 	}
@@ -273,7 +273,7 @@ func TestOperatorProblems_HiddenInAsIsMode(t *testing.T) {
 	d := testDeps(t)
 	e := NewServer(d)
 	ingest(t, e, "ingest", scenario2Events())
-	d.Sim.Jump(context.Background(), t0.Add(5*time.Hour))
+	d.Sim.Jump(context.Background(), t0.Add(5*time.Hour+30*time.Minute))
 	d.Sim.SetMode(context.Background(), sim.ModeAsIs)
 	if rows := getProblems(t, e, operatorCookie(d, "branch-kyiv-12")); len(rows) != 0 {
 		t.Fatalf("%+v", rows)
@@ -416,7 +416,7 @@ func TestReturn_RequiresReasonWithSolutionAndFlagsRisky(t *testing.T) {
 	e := NewServer(d)
 	op := operatorCookie(d, "branch-kyiv-12")
 	ingest(t, e, "ingest", scenario2Events())
-	d.Sim.Jump(context.Background(), t0.Add(5*time.Hour)) // broken chain (orange)
+	d.Sim.Jump(context.Background(), t0.Add(5*time.Hour+30*time.Minute)) // broken chain (orange)
 	if rec := act(t, e, op, contract.TTN(1), "return", `{}`); rec.Code != 400 {
 		t.Fatalf("no reason: %d", rec.Code)
 	}
@@ -447,7 +447,7 @@ func TestSplit_ShowsClientAndOperatorViews(t *testing.T) {
 	e := NewServer(d)
 	ingest(t, e, "ingest", scenario2Events())
 	d.Store.SaveNPStatus(ctx, []contract.TrackingStatus{{Number: contract.TTN(1), StatusCode: "6", Status: "x", ScheduledDeliveryDate: "18-10-2026 15:00:00"}}, time.Now())
-	d.Sim.Jump(ctx, t0.Add(5*time.Hour))
+	d.Sim.Jump(ctx, t0.Add(5*time.Hour+30*time.Minute))
 	d.Sim.SetMode(ctx, sim.ModeAsIs)
 	type split struct {
 		Client struct {
@@ -634,7 +634,7 @@ func TestSimAccept_OperatorAcceptsAtDestination(t *testing.T) {
 	d := testDeps(t)
 	e := NewServer(d)
 	ingest(t, e, "ingest", scenario2Events())
-	d.Sim.Jump(context.Background(), t0.Add(5*time.Hour))
+	d.Sim.Jump(context.Background(), t0.Add(5*time.Hour+30*time.Minute))
 	if rows := getProblems(t, e, operatorCookie(d, "branch-kyiv-12")); len(rows) != 1 {
 		t.Fatalf("precondition: %+v", rows)
 	}
@@ -747,7 +747,7 @@ func TestSeniorCheck_RoundTripToOperator(t *testing.T) {
 	d := testDepsEmu(t, srv.URL)
 	e := NewServer(d)
 	ingest(t, e, "ingest", scenario2Events())
-	d.Sim.Jump(context.Background(), t0.Add(5*time.Hour))
+	d.Sim.Jump(context.Background(), t0.Add(5*time.Hour+30*time.Minute))
 	senior, kyiv, lviv := sessionCookie(d, "senior", ""), operatorCookie(d, "branch-kyiv-12"), operatorCookie(d, "branch-lviv-5")
 
 	if rec := do(e, jsonReq("POST", "/api/senior/parcels/"+contract.TTN(1)+"/check", `{"branchId":"hub-kyiv"}`, senior)); rec.Code != 400 {
@@ -794,7 +794,7 @@ func TestSeniorConfirmReturn_ClearsRiskyReturn(t *testing.T) {
 	d := testDeps(t)
 	e := NewServer(d)
 	ingest(t, e, "ingest", scenario2Events())
-	d.Sim.Jump(context.Background(), t0.Add(5*time.Hour))
+	d.Sim.Jump(context.Background(), t0.Add(5*time.Hour+30*time.Minute))
 	act(t, e, operatorCookie(d, "branch-kyiv-12"), contract.TTN(1), "return", `{"reason":"damaged"}`)
 	senior := sessionCookie(d, "senior", "")
 	hasRisky := func() bool {

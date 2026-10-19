@@ -50,8 +50,9 @@ func TestClassify(t *testing.T) {
 		kinds []Kind
 	}{
 		{"normal in transit", in(2*time.Hour, created), Green, nil},
-		{"broken chain fresh", in(5*time.Hour, created, tripArrived), Orange, []Kind{BrokenChain}},
-		{"broken chain escalated after 6h", in(10*time.Hour+time.Minute, created, tripArrived), Red, []Kind{BrokenChain}},
+		{"trip just arrived, unload scan still on its way", in(4*time.Hour+30*time.Minute, created, tripArrived), Green, nil},
+		{"broken chain after the unloading grace", in(5*time.Hour+time.Minute, created, tripArrived), Orange, []Kind{BrokenChain}},
+		{"broken chain escalated after 6h", in(11*time.Hour+time.Minute, created, tripArrived), Red, []Kind{BrokenChain}},
 		{"overdue", in(33*time.Hour+time.Minute, created), Orange, []Kind{Overdue, Stuck}},
 		{"stuck", in(12*time.Hour+time.Minute, created), Yellow, []Kind{Stuck}},
 		{"stuck escalated to orange after 24h", func() Input { i := in(36*time.Hour+time.Minute, created); i.NPScheduled = &far; return i }(), Orange, []Kind{Stuck}},
@@ -60,12 +61,12 @@ func TestClassify(t *testing.T) {
 		{"unknown on hold stays red", Input{TTN: contract.TTN(9), Events: []contract.Event{ev(contract.KindOperatorScan, time.Hour, loc("branch-kharkiv-3")), ev(contract.KindHold, 2*time.Hour, loc("branch-kharkiv-3"))}, Now: t0.Add(3 * time.Hour)}, Red, []Kind{Unknown}},
 		{"misrouted", in(5*time.Hour, created, ev(contract.KindUnloaded, 4*time.Hour, loc("branch-lviv-5"))), Red, []Kind{Misrouted}},
 		{"misrouted cleared by redirect", in(6*time.Hour, created, ev(contract.KindUnloaded, 4*time.Hour, loc("branch-lviv-5")), ev(contract.KindRedirected, 5*time.Hour, loc("branch-lviv-5"))), Green, nil},
-		{"risky return after broken chain", in(6*time.Hour, created, tripArrived, ev(contract.KindReturnInitiated, 5*time.Hour)), Red, []Kind{BrokenChain, RiskyReturn}},
-		{"risky return cleared once scanned elsewhere", in(8*time.Hour, created, tripArrived, ev(contract.KindReturnInitiated, 5*time.Hour, loc("branch-kyiv-12")), ev(contract.KindArrivedHub, 7*time.Hour, loc("hub-kyiv"))), Orange, []Kind{BrokenChain}},
+		{"risky return after broken chain", in(6*time.Hour, created, tripArrived, ev(contract.KindReturnInitiated, 5*time.Hour+30*time.Minute)), Red, []Kind{BrokenChain, RiskyReturn}},
+		{"risky return cleared once scanned elsewhere", in(8*time.Hour, created, tripArrived, ev(contract.KindReturnInitiated, 5*time.Hour+30*time.Minute, loc("branch-kyiv-12")), ev(contract.KindArrivedHub, 7*time.Hour, loc("hub-kyiv"))), Orange, []Kind{BrokenChain}},
 		{"unknown parcel return cleared once scanned elsewhere", Input{TTN: contract.TTN(9), Now: t0.Add(5 * time.Hour), Events: []contract.Event{
 			ev(contract.KindOperatorScan, time.Hour, loc("branch-kharkiv-3")), ev(contract.KindHold, 2*time.Hour, loc("branch-kharkiv-3")),
 			ev(contract.KindReturnInitiated, 3*time.Hour, loc("branch-kharkiv-3")), ev(contract.KindOperatorScan, 4*time.Hour, loc("hub-kharkiv"))}}, Red, []Kind{Unknown}},
-		{"risky return confirmed by the senior shift", in(7*time.Hour, created, tripArrived, ev(contract.KindReturnInitiated, 5*time.Hour, loc("branch-kyiv-12")), ev(contract.KindReturnConfirmed, 6*time.Hour)), Orange, []Kind{BrokenChain}},
+		{"risky return confirmed by the senior shift", in(7*time.Hour, created, tripArrived, ev(contract.KindReturnInitiated, 5*time.Hour+30*time.Minute, loc("branch-kyiv-12")), ev(contract.KindReturnConfirmed, 6*time.Hour+30*time.Minute)), Orange, []Kind{BrokenChain}},
 		{"a check request does not reset stuck", in(13*time.Hour, created, ev(contract.KindCheckRequested, 12*time.Hour+30*time.Minute, loc("branch-kyiv-12"))), Yellow, []Kind{Stuck}},
 		{"plain return is not risky", in(3*time.Hour, created, ev(contract.KindReturnInitiated, 2*time.Hour)), Green, nil},
 		{"arrived clears everything", in(40*time.Hour, created, tripArrived, ev(contract.KindUnloaded, 4*time.Hour, loc("branch-kyiv-12"), trip("trip-1"))), Green, nil},
@@ -92,7 +93,7 @@ func TestEscalationKeepsSince(t *testing.T) {
 	p := &contract.CreatedPayload{DestinationID: "branch-kyiv-12", RouteLegs: []contract.RouteLeg{leg}}
 	got := Classify(Input{Parcel: p, Legs: p.RouteLegs, Now: t0.Add(11 * time.Hour),
 		Events: []contract.Event{ev(contract.KindCreated, 0), ev(contract.KindTripArrived, 4*time.Hour, trip("trip-1"))}})
-	if len(got) != 1 || !got[0].Since.Equal(t0.Add(4*time.Hour)) {
+	if len(got) != 1 || !got[0].Since.Equal(t0.Add(4*time.Hour+UnloadGrace)) { // the problem starts once the grace is over
 		t.Fatalf("%+v", got)
 	}
 }

@@ -186,6 +186,7 @@ nova_post/
 ```go
 OverdueAfter      = 2 * time.Hour   // після ETA
 StuckAfter        = 12 * time.Hour  // без подій
+UnloadGrace       = 1 * time.Hour   // після прибуття рейсу, перш ніж відсутній скан вивантаження стане проблемою
 EscalateOrange    = 6 * time.Hour   // 🟠 → 🔴
 EscalateYellow    = 24 * time.Hour  // 🟡 → 🟠
 ```
@@ -195,7 +196,7 @@ EscalateYellow    = 24 * time.Hour  // 🟡 → 🟠
 | `unknown` | оператор відсканував ТТН, і її не знайдено | час скану | 🔴 |
 | `misrouted` | остання фізична локація — відділення, якого немає в плані маршруту | час події | 🔴 |
 | `risky_return` | `return_initiated` для посилки з активною 🔴/🟠 проблемою або в статусі «на ідентифікації» | час події | 🔴 |
-| `broken_chain` | `trip_arrived` у локацію X, посилка в маніфесті цього рейсу, а `unloaded` у X немає | час прибуття рейсу | 🟠 |
+| `broken_chain` | `trip_arrived` у локацію X, посилка в маніфесті цього рейсу, а `unloaded` у X немає довше за `UnloadGrace` (скани приходять із затримкою й не по порядку, а вивантаження триває) | час прибуття рейсу + `UnloadGrace` | 🟠 |
 | `overdue` | `now > ETA + OverdueAfter` і немає `arrived_branch`/`unloaded` у відділенні призначення | `ETA + OverdueAfter` | 🟠 |
 | `stuck` | не видана, остання подія посилки або її рейсу старша за `StuckAfter` | остання подія + `StuckAfter` | 🟡 |
 | `incident` | інцидент на рейсі посилки або в її поточній локації | час інциденту | ⚪ |
