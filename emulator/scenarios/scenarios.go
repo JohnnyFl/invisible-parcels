@@ -127,9 +127,9 @@ var focusTrips = []trip{
 
 var focusPlan = [][2]float64{{2, 4}, {6, 16}, {26, 28}}
 
-// Build returns the facts of scenario id (1..5).
+// Build returns the facts of scenario id (1..6).
 func Build(id int) ([]world.Fact, error) {
-	if id < 1 || id > 5 {
+	if id < 1 || id > 6 {
 		return nil, fmt.Errorf("unknown scenario %d", id)
 	}
 	b := &builder{id: id}
@@ -149,6 +149,13 @@ func Build(id int) ([]world.Fact, error) {
 		b.created(ttn, "branch-kharkiv-3", "branch-kyiv-12", legs, false)
 		b.add(contract.Event{Kind: contract.KindAccepted, TTN: ttn, LocationID: "branch-kharkiv-3", OccurredAt: at(0.5)}, false)
 		b.moveLeg(ttn, focusTrips[0], false, false)
+		if id == 6 {
+			// the Kyiv terminal was hit before the trip arrived: parcels are processed by hand,
+			// hub scans are lost for 1–3, and 1–2 also lose both scans on the last leg
+			b.moveLeg(ttn, focusTrips[1], false, n <= 3)
+			b.moveLeg(ttn, focusTrips[2], n <= 3, n <= 2)
+			continue
+		}
 		b.moveLeg(ttn, focusTrips[1], false, false)
 		if ttn != FocusTTN || id == 5 {
 			if id == 5 {
@@ -176,6 +183,9 @@ func Build(id int) ([]world.Fact, error) {
 	case 5:
 		cause, _ := json.Marshal(contract.IncidentPayload{Cause: "Обстріл"})
 		b.add(contract.Event{Kind: contract.KindIncident, TripID: "trip-f3", OccurredAt: at(21), Payload: cause}, false)
+	case 6:
+		cause, _ := json.Marshal(contract.IncidentPayload{Cause: "Удар по терміналу, обробка вручну"})
+		b.add(contract.Event{Kind: contract.KindIncident, LocationID: "hub-kyiv", OccurredAt: at(15), Payload: cause}, false)
 	}
 	return b.facts, nil
 }

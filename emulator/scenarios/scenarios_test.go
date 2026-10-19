@@ -21,7 +21,7 @@ func load(t *testing.T, id int) *world.World {
 }
 
 func TestBuild_AllScenariosHaveFocusParcelAndBackground(t *testing.T) {
-	for id := 1; id <= 5; id++ {
+	for id := 1; id <= 6; id++ {
 		facts, err := Build(id)
 		if err != nil {
 			t.Fatal(err)
@@ -40,7 +40,7 @@ func TestBuild_AllScenariosHaveFocusParcelAndBackground(t *testing.T) {
 			t.Fatalf("scenario %d: %d parcels", id, created)
 		}
 	}
-	if _, err := Build(6); err == nil {
+	if _, err := Build(7); err == nil {
 		t.Fatal("expected error")
 	}
 }
@@ -133,5 +133,34 @@ func TestBackground_NoGapLongerThanStuckThreshold(t *testing.T) {
 			t.Fatalf("%s: %v gap before %s", e.TTN, e.OccurredAt.Sub(prev), e.Kind)
 		}
 		last[e.TTN] = e.OccurredAt
+	}
+}
+
+func TestScenario6_ManualProcessingAfterStrike(t *testing.T) {
+	w := load(t, 6)
+	now := Start.Add(48 * time.Hour)
+	shelf := w.Physical("branch-kyiv-12", now)
+	for _, n := range []int{1, 2, 3} {
+		if !slices.Contains(shelf, contract.TTN(n)) {
+			t.Fatalf("TTN %d should be on the Kyiv shelf: %v", n, shelf)
+		}
+	}
+	incident, unloadedAtKyiv := false, map[string]bool{}
+	for _, e := range w.Due(now) {
+		if e.Kind == contract.KindIncident && e.LocationID == "hub-kyiv" {
+			incident = true
+		}
+		if (e.TTN == contract.TTN(1) || e.TTN == contract.TTN(2)) && (e.LocationID == "hub-kyiv" || e.LocationID == "branch-kyiv-12") {
+			t.Fatalf("manually processed parcel reported a scan: %+v", e)
+		}
+		if e.Kind == contract.KindUnloaded && e.LocationID == "branch-kyiv-12" {
+			unloadedAtKyiv[e.TTN] = true
+		}
+	}
+	if !incident {
+		t.Fatal("no incident at the Kyiv terminal")
+	}
+	if !unloadedAtKyiv[contract.TTN(3)] || !unloadedAtKyiv[contract.TTN(4)] {
+		t.Fatalf("TTN 3 and 4 should be unloaded at Kyiv: %v", unloadedAtKyiv)
 	}
 }

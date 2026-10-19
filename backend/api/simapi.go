@@ -101,8 +101,8 @@ func simReset(d Deps) echo.HandlerFunc {
 func simScenario(d Deps) echo.HandlerFunc {
 	return func(c *echo.Context) error {
 		id, err := strconv.Atoi(c.Param("id"))
-		if err != nil || id < 1 || id > 5 {
-			return echo.NewHTTPError(http.StatusBadRequest, "scenario must be 1..5")
+		if err != nil || id < 1 || id > 6 {
+			return echo.NewHTTPError(http.StatusBadRequest, "scenario must be 1..6")
 		}
 		ctx := c.Request().Context()
 		if err := d.Emu.Reset(ctx); err != nil {
