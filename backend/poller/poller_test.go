@@ -96,3 +96,14 @@ func TestUnissuedTTNs_SkipsIssued(t *testing.T) {
 		t.Fatalf("%v %v", got, err)
 	}
 }
+
+func TestSaveNPStatus_IgnoresNotFound(t *testing.T) {
+	st := testStore(t)
+	ctx := context.Background()
+	st.SaveNPStatus(ctx, []contract.TrackingStatus{{Number: contract.TTN(1), StatusCode: "6", Status: "x"}}, time.Now())
+	// an emulator that lost its world answers "3 Номер не знайдено": keep the snapshot
+	st.SaveNPStatus(ctx, []contract.TrackingStatus{{Number: contract.TTN(1), StatusCode: contract.StatusNotFound, Status: "Номер не знайдено"}}, time.Now())
+	if c, _, _, ok, _ := st.NPStatus(ctx, contract.TTN(1)); !ok || c != "6" {
+		t.Fatalf("snapshot overwritten: %q", c)
+	}
+}

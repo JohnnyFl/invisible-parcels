@@ -83,3 +83,27 @@ func TestAdmin_ScenarioClockPhysicalOperatorEvent(t *testing.T) {
 		t.Fatalf("%+v", st)
 	}
 }
+
+func TestAdmin_StateReportsLoadedScenario(t *testing.T) {
+	srv := httptest.NewServer(NewServer(world.New(), &ClockHolder{}, func(f func()) { f() }))
+	defer srv.Close()
+	state := func() int {
+		resp, _ := http.Get(srv.URL + "/admin/state")
+		var s struct {
+			Scenario int `json:"scenario"`
+		}
+		json.NewDecoder(resp.Body).Decode(&s)
+		return s.Scenario
+	}
+	if state() != 0 {
+		t.Fatal("fresh emulator should report no scenario")
+	}
+	post(t, srv.URL+"/admin/scenarios/3", ``)
+	if got := state(); got != 3 {
+		t.Fatalf("after load: %d", got)
+	}
+	post(t, srv.URL+"/admin/reset", ``)
+	if got := state(); got != 0 {
+		t.Fatalf("after reset: %d", got)
+	}
+}

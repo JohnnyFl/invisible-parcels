@@ -24,11 +24,12 @@ const (
 )
 
 type Sim struct {
-	mu    sync.Mutex
-	clock contract.Clock
-	mode  Mode
-	store *store.Store
-	emu   *emuclient.Client
+	mu       sync.Mutex
+	clock    contract.Clock
+	mode     Mode
+	scenario int // last launched scenario, 0 = none
+	store    *store.Store
+	emu      *emuclient.Client
 }
 
 func New(ctx context.Context, st *store.Store, emu *emuclient.Client) (*Sim, error) {
@@ -42,6 +43,9 @@ func New(ctx context.Context, st *store.Store, emu *emuclient.Client) (*Sim, err
 		return nil, err
 	}
 	if err := s.load(ctx, "mode", &s.mode); err != nil {
+		return nil, err
+	}
+	if err := s.load(ctx, "scenario", &s.scenario); err != nil {
 		return nil, err
 	}
 	return s, nil
@@ -115,4 +119,43 @@ func (s *Sim) SetMode(ctx context.Context, m Mode) error {
 	defer s.mu.Unlock()
 	s.mode = m
 	return s.save(ctx, "mode", m)
+}
+
+// SetScenario remembers which scenario is running, so a restarted emulator can be restored.
+func (s *Sim) SetScenario(ctx context.Context, id int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.scenario = id
+	return s.save(ctx, "scenario", id)
+}
+
+// SyncEmulator restores the emulator after it restarted (its world lives in memory):
+// reload the scenario, set the clock and replay operator actions. Event IDs are
+// deterministic, so re-pushed events are ignored by ingest.
+func (s *Sim) SyncEmulator(ctx context.Context) error {
+	loaded, err := s.emu.State(ctx)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.scenario == 0 || loaded == s.scenario {
+		return nil
+	}
+	if err := s.emu.LoadScenario(ctx, s.scenario); err != nil {
+		return err
+	}
+	if err := s.emu.SetClock(ctx, s.clock.Now(time.Now()), s.clock.Speed); err != nil {
+		return err
+	}
+	ops, err := s.store.OperatorEvents(ctx)
+	if err != nil {
+		return err
+	}
+	for _, e := range ops {
+		if err := s.emu.OperatorEvent(ctx, e); err != nil {
+			return err
+		}
+	}
+	return nil
 }

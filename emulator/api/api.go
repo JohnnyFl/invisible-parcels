@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/labstack/echo/v5"
@@ -39,6 +40,7 @@ const maxDocuments = 100
 // drop queued pushes atomically.
 func NewServer(w *world.World, clk *ClockHolder, reset func(load func())) *echo.Echo {
 	e := echo.New()
+	var scenario atomic.Int32 // what is loaded now, so the backend can tell we restarted
 
 	e.POST("/v2.0/json/", func(c *echo.Context) error {
 		var req contract.Envelope[contract.TrackingRequest]
@@ -77,6 +79,7 @@ func NewServer(w *world.World, clk *ClockHolder, reset func(load func())) *echo.
 
 	e.POST("/admin/reset", func(c *echo.Context) error {
 		reset(func() { w.Load(nil) })
+		scenario.Store(0)
 		return c.NoContent(http.StatusNoContent)
 	})
 
@@ -87,7 +90,12 @@ func NewServer(w *world.World, clk *ClockHolder, reset func(load func())) *echo.
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
 		reset(func() { w.Load(facts) })
+		scenario.Store(int32(id))
 		return c.JSON(http.StatusOK, map[string]any{"facts": len(facts)})
+	})
+
+	e.GET("/admin/state", func(c *echo.Context) error {
+		return c.JSON(http.StatusOK, map[string]int32{"scenario": scenario.Load()})
 	})
 
 	e.GET("/admin/physical", func(c *echo.Context) error {

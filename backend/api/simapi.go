@@ -86,6 +86,9 @@ func simReset(d Deps) echo.HandlerFunc {
 		if err := d.Store.Reset(ctx); err != nil {
 			return err
 		}
+		if err := d.Sim.SetScenario(ctx, 0); err != nil {
+			return err
+		}
 		if err := d.Sim.SetSpeed(ctx, 0); err != nil {
 			return errEmulator(c, err)
 		}
@@ -118,6 +121,9 @@ func simScenario(d Deps) echo.HandlerFunc {
 		}
 		if err := d.Emu.LoadScenario(ctx, id); err != nil {
 			return errEmulator(c, err)
+		}
+		if err := d.Sim.SetScenario(ctx, id); err != nil {
+			return err
 		}
 		if err := d.Sim.SetSpeed(ctx, 60); err != nil {
 			return errEmulator(c, err)

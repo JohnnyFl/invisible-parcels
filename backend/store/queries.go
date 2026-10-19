@@ -24,6 +24,9 @@ func (s *Store) UnissuedTTNs(ctx context.Context) ([]string, error) {
 func (s *Store) SaveNPStatus(ctx context.Context, sts []contract.TrackingStatus, fetchedAt time.Time) error {
 	batch := &pgx.Batch{}
 	for _, st := range sts {
+		if st.StatusCode == contract.StatusNotFound {
+			continue // an emulator that lost its world must not wipe the last known status
+		}
 		var sched *time.Time
 		if t, err := time.ParseInLocation(contract.NPDateLayout, st.ScheduledDeliveryDate, contract.Kyiv); err == nil {
 			sched = &t

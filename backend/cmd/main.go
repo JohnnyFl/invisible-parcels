@@ -29,6 +29,13 @@ func main() {
 	}
 	hub := api.NewHub()
 	go poller.Run(ctx, st, emu, cfg.NPPollInterval, func() { hub.Publish("track", "problems") })
+	go func() { // the emulator keeps its world in memory: restore it after a restart
+		for range time.Tick(2 * time.Second) {
+			if err := s.SyncEmulator(ctx); err != nil {
+				log.Printf("emulator sync: %v", err)
+			}
+		}
+	}()
 	go func() { // while virtual time runs, problems age and escalate: nudge clients
 		for range time.Tick(5 * time.Second) {
 			if s.Clock().Speed > 0 {

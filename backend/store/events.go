@@ -123,3 +123,13 @@ func (s *Store) Parcel(ctx context.Context, ttn string) (*contract.CreatedPayloa
 	}
 	return &p, p.RouteLegs, rows.Err()
 }
+
+// OperatorEvents returns every operator action in journal order.
+func (s *Store) OperatorEvents(ctx context.Context) ([]contract.Event, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT `+eventCols+` FROM events WHERE source = 'operator'
+		ORDER BY occurred_at, received_at, event_id`)
+	if err != nil {
+		return nil, err
+	}
+	return scanEvents(rows)
+}

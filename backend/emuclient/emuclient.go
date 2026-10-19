@@ -93,3 +93,12 @@ func (c *Client) Physical(ctx context.Context, location string) ([]string, error
 func (c *Client) OperatorEvent(ctx context.Context, e contract.Event) error {
 	return c.do(ctx, http.MethodPost, "/admin/operator-event", e, nil)
 }
+
+// State returns the scenario the emulator has loaded (0 = none, e.g. after a restart).
+func (c *Client) State(ctx context.Context) (int, error) {
+	var out struct {
+		Scenario int `json:"scenario"`
+	}
+	err := c.do(ctx, http.MethodGet, "/admin/state", nil, &out)
+	return out.Scenario, err
+}

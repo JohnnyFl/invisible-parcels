@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
@@ -97,5 +98,52 @@ func TestSim_EmulatorDownReturnsError(t *testing.T) {
 	s, _ := New(ctx, testStore(t), &emuclient.Client{URL: "http://127.0.0.1:1", HTTP: http.DefaultClient})
 	if err := s.SetSpeed(ctx, 60); err == nil {
 		t.Fatal("expected error when emulator is down")
+	}
+}
+
+func TestSim_SyncEmulatorRestoresScenarioClockAndOperatorEvents(t *testing.T) {
+	ctx := context.Background()
+	st := testStore(t)
+	st.Reset(ctx)
+	st.InsertEvents(ctx, []contract.Event{
+		{EventID: "np1", Kind: contract.KindCreated, TTN: contract.TTN(1), OccurredAt: contract.ScenarioStart, Source: "np", Payload: []byte(`{"DestinationID":"branch-kyiv-12"}`)},
+		{EventID: "op1", Kind: contract.KindArrivedBranch, TTN: contract.TTN(1), LocationID: "branch-kyiv-12", OccurredAt: contract.ScenarioStart.Add(time.Hour), Source: "operator"},
+	}, time.Now())
+	emuScenario := 0
+	var calls []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/admin/state":
+			json.NewEncoder(w).Encode(map[string]int{"scenario": emuScenario})
+			return
+		case "/admin/operator-event":
+			var e contract.Event
+			json.NewDecoder(r.Body).Decode(&e)
+			calls = append(calls, "op "+e.EventID)
+		default:
+			calls = append(calls, r.URL.Path)
+		}
+		w.WriteHeader(204)
+	}))
+	t.Cleanup(srv.Close)
+	s, _ := New(ctx, st, &emuclient.Client{URL: srv.URL, HTTP: http.DefaultClient})
+	if err := s.SetScenario(ctx, 2); err != nil {
+		t.Fatal(err)
+	}
+
+	emuScenario = 2 // in sync: nothing to do
+	calls = nil
+	s.SyncEmulator(ctx)
+	if len(calls) != 0 {
+		t.Fatalf("in sync but called %v", calls)
+	}
+
+	emuScenario = 0 // emulator restarted and lost its world
+	if err := s.SyncEmulator(ctx); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"/admin/scenarios/2", "/admin/clock", "op op1"}
+	if !slices.Equal(calls, want) {
+		t.Fatalf("got %v, want %v", calls, want)
 	}
 }
