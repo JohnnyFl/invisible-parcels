@@ -629,3 +629,25 @@ func TestOperatorProblems_DoNotRevealDestination(t *testing.T) {
 		t.Fatal(rec.Body.String())
 	}
 }
+
+func TestSimAccept_OperatorAcceptsAtDestination(t *testing.T) {
+	d := testDeps(t)
+	e := NewServer(d)
+	ingest(t, e, "ingest", scenario2Events())
+	d.Sim.Jump(context.Background(), t0.Add(5*time.Hour))
+	if rows := getProblems(t, e, operatorCookie(d, "branch-kyiv-12")); len(rows) != 1 {
+		t.Fatalf("precondition: %+v", rows)
+	}
+	if rec := do(e, jsonReq("POST", "/api/sim/accept/"+contract.TTN(1), ``, adminCookie(d))); rec.Code != 200 {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	if rows := getProblems(t, e, operatorCookie(d, "branch-kyiv-12")); len(rows) != 0 {
+		t.Fatalf("not accepted: %+v", rows)
+	}
+	if rec := do(e, jsonReq("POST", "/api/sim/accept/"+contract.TTN(9), ``, adminCookie(d))); rec.Code != 404 {
+		t.Fatalf("unknown ttn: %d", rec.Code)
+	}
+	if rec := do(e, jsonReq("POST", "/api/sim/accept/"+contract.TTN(1), ``, operatorCookie(d, "branch-kyiv-12"))); rec.Code != 403 {
+		t.Fatalf("operator: %d", rec.Code)
+	}
+}

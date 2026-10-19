@@ -102,7 +102,7 @@ export function ScanDialog({ ttn, mode, onClose }: { ttn: string | null; mode?: 
                   <textarea required value={comment} onChange={(e) => setComment(e.target.value)} className="mt-2 w-full rounded border border-line p-2" placeholder="Опишіть причину" />
                 )}
               </fieldset>
-              {mode === "with_solution" && <p className="mb-4 text-sm text-ink-2">Повернення з причиною потрапить у журнал. Якщо посилку не ідентифіковано, його побачить старша зміна.</p>}
+              {mode === "with_solution" && <p className="mb-4 text-sm text-ink-2">Якщо посилку не ідентифіковано, повернення бачитиме старша зміна, доки посилку не відсканують деінде.</p>}
               <div className="flex gap-2">
                 <button className={primary} disabled={act.isPending}>Повернути</button>
                 <button type="button" className={secondary} onClick={() => setReturning(false)}>Назад</button>

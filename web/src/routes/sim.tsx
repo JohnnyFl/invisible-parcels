@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { CaseTour } from "../components/CaseTour";
 import { Header } from "../components/Header";
 import { LevelBadge, problemText } from "../components/LevelBadge";
 import { TrackCard } from "../components/TrackCard";
@@ -57,6 +58,13 @@ function Sim() {
       <Header />
       <main className="mx-auto max-w-7xl space-y-10 px-4 py-6">
         {post.isError && <p role="alert" className="text-lvl-red">{(post.error as Error).message}. Перевірте, що емулятор запущено.</p>}
+
+        <CaseTour
+          onStart={() => {
+            setTtn(FOCUS_TTN);
+            setLaunched(2);
+          }}
+        />
 
         <section className="flex flex-wrap items-end gap-x-10 gap-y-6">
           <div>
@@ -155,13 +163,19 @@ function Sim() {
 /** One sentence that says whether the two views disagree — the point of the demo. */
 function Verdict({ split }: { split: Split }) {
   const { client, operator, mode } = split;
-  const promised = client.statusCode === "5" || client.statusCode === "6";
+  // "6" = the app says the parcel is in the recipient's city and about to arrive
+  const promised = client.statusCode === "6";
   const seen = operator.visibleInIncoming || operator.level !== "green";
   let tone = "bg-lvl-green-bg text-lvl-green";
   let text = "Клієнт і оператор бачать узгоджену картину.";
-  if (!client.statusCode && !seen) {
+  if (client.statusCode === "7") {
+    text = "Посилка у відділенні, і клієнт, і оператор це бачать.";
+  } else if (!client.statusCode && !seen) {
     tone = "bg-lvl-grey-bg text-lvl-grey";
     text = "Ні клієнт, ні оператор поки нічого не бачать про цю посилку.";
+  } else if (client.statusCode === "5" && !seen) {
+    tone = "bg-lvl-grey-bg text-lvl-grey";
+    text = "Посилка ще в дорозі між містами. Відділення отримувача поки не має її чекати.";
   } else if (promised && !seen) {
     tone = "bg-lvl-red-bg text-lvl-red";
     text = `Розбіжність: клієнту обіцяно ${client.eta ? formatTime(client.eta) : "доставку"}, а оператор відділення посилки не бачить.`;

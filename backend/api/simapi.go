@@ -182,3 +182,25 @@ func simPhysical(d Deps) echo.HandlerFunc {
 		return c.JSON(http.StatusOK, nonNil(ttns))
 	}
 }
+
+// simAccept plays the operator for the guided tour: the parcel is accepted at its destination.
+func simAccept(d Deps) echo.HandlerFunc {
+	return func(c *echo.Context) error {
+		ttn := c.Param("ttn")
+		if !contract.TTNPattern.MatchString(ttn) {
+			return badTTN(c)
+		}
+		ctx := c.Request().Context()
+		p, _, err := d.Store.Parcel(ctx, ttn)
+		if err != nil {
+			return err
+		}
+		if p == nil {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "Посилку не знайдено"})
+		}
+		if err := record(ctx, d, contract.KindArrivedBranch, ttn, p.DestinationID, nil); err != nil {
+			return err
+		}
+		return c.JSON(http.StatusOK, map[string]string{"result": "ok"})
+	}
+}
