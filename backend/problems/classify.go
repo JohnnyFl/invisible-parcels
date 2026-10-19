@@ -92,6 +92,9 @@ func Classify(in Input) []Problem {
 	unloadedAt := map[string]bool{}
 	var lastPlace *contract.Event
 	for i, e := range in.Events {
+		if contract.IsManagement(e.Kind) {
+			continue // a decision about the parcel is not a sign of life
+		}
 		lastAt = e.OccurredAt
 		switch e.Kind {
 		case contract.KindIssued:
@@ -182,7 +185,8 @@ func addRiskyReturns(in Input, add func(Kind, Severity, time.Time)) {
 		for _, b := range before.Events {
 			held = held || b.Kind == contract.KindHold
 		}
-		if (held || Level(Classify(before)) >= Orange) && !scannedElsewhereAfter(in.Events[i+1:], e.LocationID) {
+		after := in.Events[i+1:]
+		if (held || Level(Classify(before)) >= Orange) && !scannedElsewhereAfter(after, e.LocationID) && !confirmed(after) {
 			add(RiskyReturn, Red, e.OccurredAt)
 			return
 		}
@@ -198,6 +202,16 @@ var placingKinds = map[string]bool{
 func scannedElsewhereAfter(evs []contract.Event, returnedAt string) bool {
 	for _, e := range evs {
 		if placingKinds[e.Kind] && e.LocationID != "" && e.LocationID != returnedAt {
+			return true
+		}
+	}
+	return false
+}
+
+// confirmed: the senior shift checked the return and confirmed it is justified.
+func confirmed(evs []contract.Event) bool {
+	for _, e := range evs {
+		if e.Kind == contract.KindReturnConfirmed {
 			return true
 		}
 	}

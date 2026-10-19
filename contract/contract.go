@@ -129,7 +129,25 @@ const (
 	KindIncident        = "incident"
 	KindOperatorScan    = "operator_scan"
 	KindHold            = "hold"
+
+	// management events: decisions about a parcel, not its movement
+	KindCheckRequested  = "check_requested"  // senior asks a branch to look for the parcel
+	KindCheckFound      = "check_found"      // operator: found it
+	KindCheckNotFound   = "check_not_found"  // operator: not found
+	KindReturnConfirmed = "return_confirmed" // senior: the return is justified
 )
+
+// IsManagement: these events record decisions, they are not scans and never move a parcel.
+func IsManagement(kind string) bool {
+	switch kind {
+	case KindCheckRequested, KindCheckFound, KindCheckNotFound, KindReturnConfirmed:
+		return true
+	}
+	return false
+}
+
+type CheckPayload struct{ Note string }
+type ConfirmPayload struct{ Comment string }
 
 // NP StatusCode values (from public integrations; verify against official docs).
 const (

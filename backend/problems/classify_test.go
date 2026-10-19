@@ -65,6 +65,8 @@ func TestClassify(t *testing.T) {
 		{"unknown parcel return cleared once scanned elsewhere", Input{TTN: contract.TTN(9), Now: t0.Add(5 * time.Hour), Events: []contract.Event{
 			ev(contract.KindOperatorScan, time.Hour, loc("branch-kharkiv-3")), ev(contract.KindHold, 2*time.Hour, loc("branch-kharkiv-3")),
 			ev(contract.KindReturnInitiated, 3*time.Hour, loc("branch-kharkiv-3")), ev(contract.KindOperatorScan, 4*time.Hour, loc("hub-kharkiv"))}}, Red, []Kind{Unknown}},
+		{"risky return confirmed by the senior shift", in(7*time.Hour, created, tripArrived, ev(contract.KindReturnInitiated, 5*time.Hour, loc("branch-kyiv-12")), ev(contract.KindReturnConfirmed, 6*time.Hour)), Orange, []Kind{BrokenChain}},
+		{"a check request does not reset stuck", in(13*time.Hour, created, ev(contract.KindCheckRequested, 12*time.Hour+30*time.Minute, loc("branch-kyiv-12"))), Yellow, []Kind{Stuck}},
 		{"plain return is not risky", in(3*time.Hour, created, ev(contract.KindReturnInitiated, 2*time.Hour)), Green, nil},
 		{"arrived clears everything", in(40*time.Hour, created, tripArrived, ev(contract.KindUnloaded, 4*time.Hour, loc("branch-kyiv-12"), trip("trip-1"))), Green, nil},
 		{"issued clears everything", in(40*time.Hour, created, ev(contract.KindIssued, 3*time.Hour)), Green, nil},
