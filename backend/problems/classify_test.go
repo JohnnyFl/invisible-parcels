@@ -61,6 +61,10 @@ func TestClassify(t *testing.T) {
 		{"misrouted", in(5*time.Hour, created, ev(contract.KindUnloaded, 4*time.Hour, loc("branch-lviv-5"))), Red, []Kind{Misrouted}},
 		{"misrouted cleared by redirect", in(6*time.Hour, created, ev(contract.KindUnloaded, 4*time.Hour, loc("branch-lviv-5")), ev(contract.KindRedirected, 5*time.Hour, loc("branch-lviv-5"))), Green, nil},
 		{"risky return after broken chain", in(6*time.Hour, created, tripArrived, ev(contract.KindReturnInitiated, 5*time.Hour)), Red, []Kind{BrokenChain, RiskyReturn}},
+		{"risky return cleared once scanned elsewhere", in(8*time.Hour, created, tripArrived, ev(contract.KindReturnInitiated, 5*time.Hour, loc("branch-kyiv-12")), ev(contract.KindArrivedHub, 7*time.Hour, loc("hub-kyiv"))), Orange, []Kind{BrokenChain}},
+		{"unknown parcel return cleared once scanned elsewhere", Input{TTN: contract.TTN(9), Now: t0.Add(5 * time.Hour), Events: []contract.Event{
+			ev(contract.KindOperatorScan, time.Hour, loc("branch-kharkiv-3")), ev(contract.KindHold, 2*time.Hour, loc("branch-kharkiv-3")),
+			ev(contract.KindReturnInitiated, 3*time.Hour, loc("branch-kharkiv-3")), ev(contract.KindOperatorScan, 4*time.Hour, loc("hub-kharkiv"))}}, Red, []Kind{Unknown}},
 		{"plain return is not risky", in(3*time.Hour, created, ev(contract.KindReturnInitiated, 2*time.Hour)), Green, nil},
 		{"arrived clears everything", in(40*time.Hour, created, tripArrived, ev(contract.KindUnloaded, 4*time.Hour, loc("branch-kyiv-12"), trip("trip-1"))), Green, nil},
 		{"issued clears everything", in(40*time.Hour, created, ev(contract.KindIssued, 3*time.Hour)), Green, nil},

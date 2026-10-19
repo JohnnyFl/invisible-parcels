@@ -182,9 +182,24 @@ func addRiskyReturns(in Input, add func(Kind, Severity, time.Time)) {
 		for _, b := range before.Events {
 			held = held || b.Kind == contract.KindHold
 		}
-		if held || Level(Classify(before)) >= Orange {
+		if (held || Level(Classify(before)) >= Orange) && !scannedElsewhereAfter(in.Events[i+1:], e.LocationID) {
 			add(RiskyReturn, Red, e.OccurredAt)
 			return
 		}
 	}
+}
+
+var placingKinds = map[string]bool{
+	contract.KindOperatorScan: true, contract.KindUnloaded: true, contract.KindArrivedBranch: true,
+	contract.KindArrivedHub: true, contract.KindSorted: true, contract.KindAccepted: true,
+}
+
+// scannedElsewhereAfter: the returned parcel turned up at another location, so it is found.
+func scannedElsewhereAfter(evs []contract.Event, returnedAt string) bool {
+	for _, e := range evs {
+		if placingKinds[e.Kind] && e.LocationID != "" && e.LocationID != returnedAt {
+			return true
+		}
+	}
+	return false
 }
