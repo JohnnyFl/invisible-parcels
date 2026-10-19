@@ -31,7 +31,14 @@ function Login() {
       qc.setQueryData(["me"], me);
       navigate({ to: homeOf[me.role] });
     } catch (err) {
-      setError(err instanceof ApiError && err.status === 401 ? "Невірний пароль. Перевірте роль і спробуйте ще раз." : "Не вдалося увійти. Перевірте, що сервер запущено.");
+      const status = err instanceof ApiError ? err.status : 0;
+      setError(
+        status === 401
+          ? "Невірний пароль. Перевірте роль і спробуйте ще раз."
+          : status === 429
+            ? "Забагато невдалих спроб. Спробуйте за 15 хвилин."
+            : "Не вдалося увійти. Перевірте, що сервер запущено.",
+      );
     }
   }
 

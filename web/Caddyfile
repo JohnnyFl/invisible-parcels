@@ -1,5 +1,6 @@
-localhost {
-	tls internal
+# SITE_ADDRESS: your domain (e.g. nova-post.duckdns.org) → Let's Encrypt certificate;
+# localhost (default) → Caddy's local certificate
+{$SITE_ADDRESS:localhost} {
 	# the NP webhook is internal: the emulator calls backend:8080 directly
 	handle /api/ingest/* {
 		respond 404

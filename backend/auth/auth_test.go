@@ -118,3 +118,30 @@ func TestLoginLogoutMe(t *testing.T) {
 		t.Fatalf("logout cookie %+v", cs)
 	}
 }
+
+func loginFrom(e *echo.Echo, ip, body string) int {
+	req := httptest.NewRequest("POST", "/api/login", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Forwarded-For", ip)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	return rec.Code
+}
+
+func TestLogin_LimitsFailedAttemptsPerIP(t *testing.T) {
+	cfg := config.Config{AppSecret: "k", AdminPassword: "a", SeniorPassword: "s", OperatorPassword: "o"}
+	e := echo.New()
+	in, _, _ := Handlers(cfg)
+	e.POST("/api/login", in)
+	for i := 0; i < 10; i++ {
+		if code := loginFrom(e, "203.0.113.7", `{"role":"admin","password":"guess"}`); code != 401 {
+			t.Fatalf("attempt %d: %d", i, code)
+		}
+	}
+	if code := loginFrom(e, "203.0.113.7", `{"role":"admin","password":"a"}`); code != 429 {
+		t.Fatalf("11th attempt, even with the right password: %d", code)
+	}
+	if code := loginFrom(e, "198.51.100.9", `{"role":"admin","password":"a"}`); code != 200 {
+		t.Fatalf("another IP is not limited: %d", code)
+	}
+}

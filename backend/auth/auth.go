@@ -9,9 +9,11 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/labstack/echo/v5"
@@ -23,7 +25,51 @@ import (
 const (
 	CookieName = "session"
 	ttl        = 12 * time.Hour
+
+	maxFailedLogins = 10
+	failedWindow    = 15 * time.Minute
 )
+
+// failures counts failed logins per client IP in a sliding window.
+// ponytail: in-process, resets on restart; enough against password guessing on one demo box.
+type failures struct {
+	mu   sync.Mutex
+	hits map[string][]time.Time
+}
+
+func (f *failures) recent(ip string, now time.Time) []time.Time {
+	kept := f.hits[ip][:0]
+	for _, t := range f.hits[ip] {
+		if now.Sub(t) < failedWindow {
+			kept = append(kept, t)
+		}
+	}
+	f.hits[ip] = kept
+	return kept
+}
+
+func (f *failures) blocked(ip string, now time.Time) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.recent(ip, now)) >= maxFailedLogins
+}
+
+func (f *failures) add(ip string, now time.Time) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.hits[ip] = append(f.recent(ip, now), now)
+}
+
+// clientIP: Caddy replaces any client-sent X-Forwarded-For with the real address,
+// and the backend is not exposed directly, so the first value is trustworthy here.
+func clientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		first, _, _ := strings.Cut(xff, ",")
+		return strings.TrimSpace(first)
+	}
+	host, _, _ := net.SplitHostPort(r.RemoteAddr)
+	return host
+}
 
 type Session struct {
 	Role      string    `json:"role"`
@@ -99,8 +145,13 @@ func FromContext(c *echo.Context) Session {
 
 func Handlers(cfg config.Config) (login, logout, me echo.HandlerFunc) {
 	passwords := map[string]string{"admin": cfg.AdminPassword, "senior": cfg.SeniorPassword, "operator": cfg.OperatorPassword}
+	failed := &failures{hits: map[string][]time.Time{}}
 
 	login = func(c *echo.Context) error {
+		ip := clientIP(c.Request())
+		if failed.blocked(ip, time.Now()) {
+			return c.JSON(http.StatusTooManyRequests, map[string]string{"error": "Забагато невдалих спроб. Спробуйте за 15 хвилин."})
+		}
 		var req struct {
 			Role     string `json:"role"`
 			BranchID string `json:"branchId"`
@@ -121,6 +172,7 @@ func Handlers(cfg config.Config) (login, logout, me echo.HandlerFunc) {
 			req.BranchID = ""
 		}
 		if subtle.ConstantTimeCompare([]byte(req.Password), []byte(want)) != 1 {
+			failed.add(ip, time.Now())
 			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Невірний пароль"})
 		}
 		s := Session{Role: req.Role, BranchID: req.BranchID, ExpiresAt: time.Now().Add(ttl)}

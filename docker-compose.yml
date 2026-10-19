@@ -9,7 +9,7 @@ services:
       POSTGRES_USER: novapost
       POSTGRES_PASSWORD: novapost
       POSTGRES_DB: novapost
-    ports: ["5432:5432"]
+    ports: ["127.0.0.1:5432:5432"] # local dev only, never exposed outside the machine
     volumes: [pgdata:/var/lib/postgresql]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U novapost"]
@@ -37,6 +37,8 @@ services:
 
   web:
     build: ./web
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
     ports: ["80:80", "443:443"]
     volumes: [caddy_data:/data]
     depends_on: [backend]
