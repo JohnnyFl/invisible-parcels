@@ -235,7 +235,7 @@ EscalateYellow    = 24 * time.Hour  // 🟡 → 🟠
 ## 9. Авторизація
 
 - Своя форма входу. Ролі: `admin` (симулятор), `senior` (усі відділення), `operator` (одне відділення, вибирається на формі).
-- Паролі з env: `ADMIN_PASSWORD`, `SENIOR_PASSWORD`, `OPERATOR_PASSWORD` (типові значення для dev + попередження в лозі). Порівняння через `subtle.ConstantTimeCompare`.
+- Паролі з env: `ADMIN_PASSWORD`, `SENIOR_PASSWORD`, `OPERATOR_PASSWORD`, типово `demo` (публічний пароль демо). Попередження в лозі лише для типових `APP_SECRET` і `INGEST_SECRET`. Порівняння через `subtle.ConstantTimeCompare`.
 - Cookie `session = base64(role|branch|expiresAt) + "." + hex(HMAC-SHA256(…, APP_SECRET))`, `HttpOnly`, `SameSite=Lax`, `Secure` за HTTPS. Таблиці сесій немає.
 - Клієнт без пароля: `GET /api/track/{ttn}?phone=`. Без телефону віддається лише статус і ETA (з позначкою «прогноз»), з правильним телефоном — повні деталі.
 
@@ -328,7 +328,7 @@ app_state   (key text pk, value jsonb)  -- годинник, режим
 | `BACKEND_URL` (для емулятора) | `http://localhost:8080` |
 | `INGEST_SECRET` | `dev-ingest-secret` |
 | `APP_SECRET` | `dev-app-secret` |
-| `ADMIN_PASSWORD` / `SENIOR_PASSWORD` / `OPERATOR_PASSWORD` | `admin` / `senior` / `operator` |
+| `ADMIN_PASSWORD` / `SENIOR_PASSWORD` / `OPERATOR_PASSWORD` | `demo` |
 | `NP_POLL_INTERVAL` | `2s` |
 | `LOOKUP_LIMIT_PER_HOUR` | `30` |
 

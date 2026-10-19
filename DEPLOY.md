@@ -37,7 +37,7 @@ cp .env.example .env
 
 - `SITE_ADDRESS` — ваш домен, наприклад `nova-post.duckdns.org`;
 - `APP_SECRET` і `INGEST_SECRET` — випадкові рядки;
-- `ADMIN_PASSWORD`, `SENIOR_PASSWORD`, `OPERATOR_PASSWORD` — паролі ролей. Вони опубліковані в README (`demo`), тож якщо змінюєте їх, оновіть і README. Ніде більше ці паролі не використовуйте.
+- `ADMIN_PASSWORD`, `SENIOR_PASSWORD`, `OPERATOR_PASSWORD` — паролі ролей, типово `demo`. Вони опубліковані в README, тож якщо змінюєте їх, оновіть і README. Ніде більше ці паролі не використовуйте.
 
 Випадковий рядок можна згенерувати так:
 

@@ -23,9 +23,9 @@ services:
       DATABASE_URL: postgres://novapost:novapost@postgres:5432/novapost?sslmode=disable
       EMULATOR_URL: http://emulator:8090
       APP_SECRET: ${APP_SECRET:-dev-app-secret}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
-      SENIOR_PASSWORD: ${SENIOR_PASSWORD:-senior}
-      OPERATOR_PASSWORD: ${OPERATOR_PASSWORD:-operator}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-demo}
+      SENIOR_PASSWORD: ${SENIOR_PASSWORD:-demo}
+      OPERATOR_PASSWORD: ${OPERATOR_PASSWORD:-demo}
     depends_on:
       postgres: { condition: service_healthy }
 

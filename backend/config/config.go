@@ -31,13 +31,14 @@ func env(key, def string) string {
 
 func Load() Config {
 	c := Config{
-		DatabaseURL:      env("DATABASE_URL", "postgres://novapost:novapost@localhost:5432/novapost?sslmode=disable"),
-		EmulatorURL:      env("EMULATOR_URL", "http://localhost:8090"),
-		IngestSecret:     env("INGEST_SECRET", "dev-ingest-secret"),
-		AppSecret:        env("APP_SECRET", "dev-app-secret"),
-		AdminPassword:    env("ADMIN_PASSWORD", "admin"),
-		SeniorPassword:   env("SENIOR_PASSWORD", "senior"),
-		OperatorPassword: env("OPERATOR_PASSWORD", "operator"),
+		DatabaseURL:  env("DATABASE_URL", "postgres://novapost:novapost@localhost:5432/novapost?sslmode=disable"),
+		EmulatorURL:  env("EMULATOR_URL", "http://localhost:8090"),
+		IngestSecret: env("INGEST_SECRET", "dev-ingest-secret"),
+		AppSecret:    env("APP_SECRET", "dev-app-secret"),
+		// role passwords are public demo passwords (see README); the two secrets below are not
+		AdminPassword:    env("ADMIN_PASSWORD", "demo"),
+		SeniorPassword:   env("SENIOR_PASSWORD", "demo"),
+		OperatorPassword: env("OPERATOR_PASSWORD", "demo"),
 		Port:             env("PORT", "8080"),
 	}
 	var err error
@@ -54,14 +55,12 @@ func Load() Config {
 }
 
 // DefaultSecrets names the secrets still at their published dev defaults.
+// Role passwords are left out: "demo" is published on purpose.
 func DefaultSecrets(c Config) []string {
 	var out []string
 	for _, s := range []struct{ name, value, def string }{
 		{"APP_SECRET", c.AppSecret, "dev-app-secret"},
 		{"INGEST_SECRET", c.IngestSecret, "dev-ingest-secret"},
-		{"ADMIN_PASSWORD", c.AdminPassword, "admin"},
-		{"SENIOR_PASSWORD", c.SeniorPassword, "senior"},
-		{"OPERATOR_PASSWORD", c.OperatorPassword, "operator"},
 	} {
 		if s.value == s.def {
 			out = append(out, s.name)
