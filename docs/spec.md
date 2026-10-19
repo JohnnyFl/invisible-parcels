@@ -163,6 +163,7 @@ nova_post/
 | `POST /admin/clock` | `{ virtualNow, speed }`. Встановлює годинник (його надсилає backend) |
 | `POST /admin/reset` | очищає світ |
 | `POST /admin/scenarios/{id}` | завантажує сценарій 1–6 |
+| `POST /admin/parcels/random` | `{count}` → посилки з випадковою долею (`normal`, `not_loaded`, `missed_scans`, `misrouted`, `unknown`, `incident`; звичайних ≈ 4 з 9), що стартують від поточного віртуального часу. ТТН і ID подій беруться з лічильника, який стартує від реального часу, тож не повторюються після перезапуску |
 | `GET /admin/state` | `{ scenario }` — який сценарій завантажено (0 після перезапуску). Backend кожні 2 с звіряє його зі своїм і після перезапуску емулятора відновлює сценарій, годинник і дії операторів |
 | `GET /admin/physical?location=` | які посилки **фізично** лежать у локації (панель «Склад» у демо) |
 | `POST /admin/operator-event` | дія оператора (`contract.Event`, `source = "operator"`) потрапляє у світ емулятора, і клієнтський статус оновлюється (наприклад, після «Прийняти» → `7`) |
@@ -248,6 +249,7 @@ EscalateYellow    = 24 * time.Hour  // 🟡 → 🟠
 | `GET /api/senior/trace/{ttn}` | senior | «Де обірвався слід»: маршрут за планом поруч із фактичними сканами (§12а) |
 | `GET /api/operator/trace/{ttn}` | operator | те саме, але лише для посилок, які відділення вже бачить (адресовані йому, у маршруті через нього, востаннє бачені в ньому); інакше 404; кожен запит в `audit_log` |
 | `POST /api/sim/accept/{ttn}` | admin | для туру «Показати кейс»: оператор приймає посилку у відділенні призначення |
+| `POST /api/sim/parcels/random` | admin | `{count: 1..20}`: додає випадкові посилки до поточного світу (без скидання), запускає час ×60, якщо він стоїть. Відповідь: `[{ttn, kind, lookAt}]` |
 | `GET /api/stream` | будь-яка | SSE |
 | `GET/POST /api/sim/clock` | admin | годинник |
 | `POST /api/sim/mode` | admin | `as_is` / `with_solution` |

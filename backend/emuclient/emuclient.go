@@ -102,3 +102,17 @@ func (c *Client) State(ctx context.Context) (int, error) {
 	err := c.do(ctx, http.MethodGet, "/admin/state", nil, &out)
 	return out.Scenario, err
 }
+
+// Added is one random parcel the emulator created and whose operator screen shows it.
+type Added struct {
+	TTN    string `json:"ttn"`
+	Kind   string `json:"kind"`
+	LookAt string `json:"lookAt"`
+}
+
+// AddRandom adds count random parcels to the running world.
+func (c *Client) AddRandom(ctx context.Context, count int) ([]Added, error) {
+	var out []Added
+	err := c.do(ctx, http.MethodPost, "/admin/parcels/random", map[string]int{"count": count}, &out)
+	return out, err
+}

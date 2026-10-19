@@ -53,6 +53,15 @@ func (w *World) add(f fact) {
 	w.facts = append(w.facts, f)
 }
 
+// Add appends facts to the running world (random parcels), keeping everything else.
+func (w *World) Add(facts []Fact) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for _, f := range facts {
+		w.add(fact{Fact: f})
+	}
+}
+
 // Due returns not-yet-sent reported events with OccurredAt <= now, oldest first.
 func (w *World) Due(now time.Time) []contract.Event {
 	w.mu.Lock()

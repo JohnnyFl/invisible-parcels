@@ -22,12 +22,12 @@ var hubOf = map[string]string{
 var branches = []string{"branch-kyiv-12", "branch-lviv-5", "branch-kharkiv-3"}
 
 type builder struct {
-	id    int
-	facts []world.Fact
+	prefix string // event IDs are "<prefix>-e<n>": deterministic, so re-pushes are idempotent
+	facts  []world.Fact
 }
 
 func (b *builder) add(e contract.Event, hidden bool) {
-	e.EventID = fmt.Sprintf("s%d-e%d", b.id, len(b.facts))
+	e.EventID = fmt.Sprintf("%s-e%d", b.prefix, len(b.facts))
 	e.Source = "np"
 	b.facts = append(b.facts, world.Fact{Event: e, Hidden: hidden})
 }
@@ -47,14 +47,14 @@ func (b *builder) runTrip(t trip, arrives bool) {
 	}
 }
 
-// parcel emits created with a route plan built from trips; planned times are given per leg.
-func (b *builder) created(ttn, origin, dest string, legs []contract.RouteLeg, hidden bool) {
+// created emits the parcel with its route plan at hour h (from Start).
+func (b *builder) created(ttn, origin, dest string, legs []contract.RouteLeg, hidden bool, h float64) {
 	p, _ := json.Marshal(contract.CreatedPayload{
 		SenderPhone:    "+38050" + ttn[len(ttn)-7:],
 		RecipientPhone: "+38067" + ttn[len(ttn)-7:],
 		OriginID:       origin, DestinationID: dest, RouteLegs: legs,
 	})
-	b.add(contract.Event{Kind: contract.KindCreated, TTN: ttn, LocationID: origin, OccurredAt: at(0), Payload: p}, hidden)
+	b.add(contract.Event{Kind: contract.KindCreated, TTN: ttn, LocationID: origin, OccurredAt: at(h), Payload: p}, hidden)
 }
 
 func legsFor(trips []trip, planned [][2]float64) []contract.RouteLeg {
@@ -68,7 +68,7 @@ func legsFor(trips []trip, planned [][2]float64) []contract.RouteLeg {
 
 // moveAll emits the normal scan chain of one parcel along trips (all reported).
 func (b *builder) moveAll(ttn string, trips []trip) {
-	b.add(contract.Event{Kind: contract.KindAccepted, TTN: ttn, LocationID: trips[0].from, OccurredAt: at(0.5)}, false)
+	b.add(contract.Event{Kind: contract.KindAccepted, TTN: ttn, LocationID: trips[0].from, OccurredAt: at(trips[0].dep - 1.5)}, false)
 	for _, t := range trips {
 		b.moveLeg(ttn, t, false, false)
 	}
@@ -111,7 +111,7 @@ func (b *builder) background() {
 		}
 		for i := pair; i < 25; i += 3 {
 			ttn := contract.TTN(100 + i)
-			b.created(ttn, origin, dest, legsFor(trips, onTime(trips)), false)
+			b.created(ttn, origin, dest, legsFor(trips, onTime(trips)), false, 0)
 			b.moveAll(ttn, trips)
 		}
 	}
@@ -132,7 +132,7 @@ func Build(id int) ([]world.Fact, error) {
 	if id < 1 || id > 6 {
 		return nil, fmt.Errorf("unknown scenario %d", id)
 	}
-	b := &builder{id: id}
+	b := &builder{prefix: fmt.Sprintf("s%d", id)}
 	b.background()
 
 	legs := legsFor(focusTrips, focusPlan)
@@ -146,7 +146,7 @@ func Build(id int) ([]world.Fact, error) {
 	}
 	for n := first; n <= 4; n++ {
 		ttn := contract.TTN(n)
-		b.created(ttn, "branch-kharkiv-3", "branch-kyiv-12", legs, false)
+		b.created(ttn, "branch-kharkiv-3", "branch-kyiv-12", legs, false, 0)
 		b.add(contract.Event{Kind: contract.KindAccepted, TTN: ttn, LocationID: "branch-kharkiv-3", OccurredAt: at(0.5)}, false)
 		b.moveLeg(ttn, focusTrips[0], false, false)
 		if id == 6 {
@@ -178,7 +178,7 @@ func Build(id int) ([]world.Fact, error) {
 
 	switch id {
 	case 4: // a parcel nobody knows about lies at Kharkiv №3
-		b.created(FocusTTN, "branch-lviv-5", "branch-kyiv-12", nil, true)
+		b.created(FocusTTN, "branch-lviv-5", "branch-kyiv-12", nil, true, 0)
 		b.add(contract.Event{Kind: contract.KindUnloaded, TTN: FocusTTN, LocationID: "branch-kharkiv-3", OccurredAt: at(22)}, true)
 	case 5:
 		cause, _ := json.Marshal(contract.IncidentPayload{Cause: "Обстріл"})

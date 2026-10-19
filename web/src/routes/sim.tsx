@@ -4,6 +4,7 @@ import { useState } from "react";
 import { CaseTour } from "../components/CaseTour";
 import { Header } from "../components/Header";
 import { LevelBadge, problemText } from "../components/LevelBadge";
+import { RandomParcels } from "../components/RandomParcels";
 import { TrackCard } from "../components/TrackCard";
 import { api, formatTime, type ClockState, type Mode, type Split } from "../lib/api";
 import { requireRole } from "../lib/guard";
@@ -125,6 +126,13 @@ function Sim() {
             </div>
           </div>
         </section>
+
+        <RandomParcels
+          onPick={(t) => {
+            setTtn(t);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+        />
 
         <section aria-labelledby="sc-h">
           <h2 id="sc-h" className="mb-1 text-xl font-semibold">Сценарії</h2>

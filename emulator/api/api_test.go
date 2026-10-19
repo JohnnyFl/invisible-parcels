@@ -118,3 +118,30 @@ func TestAdmin_ClockFlushesDueEventsBeforeReplying(t *testing.T) {
 		t.Fatalf("flushed at %v, want %v", flushedAt, vt)
 	}
 }
+
+func TestAdmin_RandomParcelsJoinTheRunningWorld(t *testing.T) {
+	w := world.New()
+	facts, _ := scenarios.Build(2)
+	w.Load(facts)
+	clk := &ClockHolder{}
+	now := scenarios.Start.Add(30 * time.Hour)
+	clk.Set(contract.Clock{RealBase: time.Now(), VirtualBase: now})
+	srv := httptest.NewServer(NewServer(w, clk, func(f func()) { f() }, func(time.Time) {}))
+	defer srv.Close()
+	var got []scenarios.Added
+	json.NewDecoder(post(t, srv.URL+"/admin/parcels/random", `{"count":3}`).Body).Decode(&got)
+	if len(got) != 3 {
+		t.Fatalf("%+v", got)
+	}
+	var again []scenarios.Added
+	json.NewDecoder(post(t, srv.URL+"/admin/parcels/random", `{"count":2}`).Body).Decode(&again)
+	if len(again) != 2 || again[0].TTN == got[0].TTN {
+		t.Fatalf("TTNs must not repeat: %+v %+v", got, again)
+	}
+	if _, ok := w.Track(scenarios.FocusTTN, now); !ok {
+		t.Fatal("scenario world was replaced")
+	}
+	if resp := post(t, srv.URL+"/admin/parcels/random", `{"count":0}`); resp.StatusCode != 400 {
+		t.Fatalf("count 0: %d", resp.StatusCode)
+	}
+}

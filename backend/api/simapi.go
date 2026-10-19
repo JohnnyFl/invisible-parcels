@@ -204,3 +204,27 @@ func simAccept(d Deps) echo.HandlerFunc {
 		return c.JSON(http.StatusOK, map[string]string{"result": "ok"})
 	}
 }
+
+// simRandomParcels: add random parcels to the running world; if time is paused, start it.
+func simRandomParcels(d Deps) echo.HandlerFunc {
+	return func(c *echo.Context) error {
+		var req struct {
+			Count int `json:"count"`
+		}
+		if err := c.Bind(&req); err != nil || req.Count < 1 || req.Count > 20 {
+			return echo.NewHTTPError(http.StatusBadRequest, "count must be 1..20")
+		}
+		ctx := c.Request().Context()
+		if d.Sim.Clock().Speed == 0 {
+			if err := d.Sim.SetSpeed(ctx, 60); err != nil {
+				return errEmulator(c, err)
+			}
+		}
+		added, err := d.Emu.AddRandom(ctx, req.Count)
+		if err != nil {
+			return errEmulator(c, err)
+		}
+		d.Hub.Publish(allKeys...)
+		return c.JSON(http.StatusOK, added)
+	}
+}

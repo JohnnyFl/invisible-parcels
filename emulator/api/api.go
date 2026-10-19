@@ -2,6 +2,7 @@
 package api
 
 import (
+	"math/rand/v2"
 	"net/http"
 	"strconv"
 	"sync"
@@ -41,6 +42,10 @@ const maxDocuments = 100
 func NewServer(w *world.World, clk *ClockHolder, reset func(load func()), flush func(now time.Time)) *echo.Echo {
 	e := echo.New()
 	var scenario atomic.Int32 // what is loaded now, so the backend can tell we restarted
+	// TTNs and event IDs of random parcels must not repeat across emulator restarts
+	// (the backend keeps its journal), so the counter starts from the wall clock.
+	var next atomic.Int64
+	next.Store(1_000_000 + time.Now().Unix()%100_000_000*100)
 
 	e.POST("/v2.0/json/", func(c *echo.Context) error {
 		var req contract.Envelope[contract.TrackingRequest]
@@ -93,6 +98,20 @@ func NewServer(w *world.World, clk *ClockHolder, reset func(load func()), flush 
 		reset(func() { w.Load(facts) })
 		scenario.Store(int32(id))
 		return c.JSON(http.StatusOK, map[string]any{"facts": len(facts)})
+	})
+
+	e.POST("/admin/parcels/random", func(c *echo.Context) error {
+		var req struct {
+			Count int `json:"count"`
+		}
+		if err := c.Bind(&req); err != nil || req.Count < 1 || req.Count > 20 {
+			return echo.NewHTTPError(http.StatusBadRequest, "count must be 1..20")
+		}
+		first := int(next.Add(int64(req.Count))) - req.Count
+		r := rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), uint64(first)))
+		facts, added := scenarios.Random(r, clk.Now(), first, first, req.Count)
+		w.Add(facts)
+		return c.JSON(http.StatusOK, added)
 	})
 
 	e.GET("/admin/state", func(c *echo.Context) error {

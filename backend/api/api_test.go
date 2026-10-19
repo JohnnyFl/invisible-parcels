@@ -680,3 +680,34 @@ func TestTrace_SeniorSeesAnyOperatorOnlyOwnBranch(t *testing.T) {
 		t.Fatalf("invalid: %d", code)
 	}
 }
+
+func TestSimRandomParcels_StartsTimeAndPassesListThrough(t *testing.T) {
+	var asked int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/admin/parcels/random" {
+			var req struct{ Count int }
+			json.NewDecoder(r.Body).Decode(&req)
+			asked = req.Count
+			json.NewEncoder(w).Encode([]map[string]string{{"ttn": contract.TTN(1000001), "kind": "missed_scans", "lookAt": "branch-kyiv-12"}})
+			return
+		}
+		w.WriteHeader(204)
+	}))
+	defer srv.Close()
+	d := testDepsEmu(t, srv.URL)
+	e := NewServer(d)
+	rec := do(e, jsonReq("POST", "/api/sim/parcels/random", `{"count":5}`, adminCookie(d)))
+	if rec.Code != 200 || asked != 5 || !strings.Contains(rec.Body.String(), `"kind":"missed_scans"`) {
+		t.Fatalf("%d %s asked=%d", rec.Code, rec.Body, asked)
+	}
+	if d.Sim.Clock().Speed != 60 {
+		t.Fatalf("time not started: %v", d.Sim.Clock().Speed)
+	}
+	if rec := do(e, jsonReq("POST", "/api/sim/parcels/random", `{"count":50}`, adminCookie(d))); rec.Code != 400 {
+		t.Fatalf("count 50: %d", rec.Code)
+	}
+	d2 := testDepsEmu(t, "http://127.0.0.1:1")
+	if rec := do(NewServer(d2), jsonReq("POST", "/api/sim/parcels/random", `{"count":5}`, adminCookie(d2))); rec.Code != 502 {
+		t.Fatalf("emulator down: %d", rec.Code)
+	}
+}

@@ -103,3 +103,21 @@ func TestPhysical_NoDuplicates(t *testing.T) {
 		t.Fatalf("%v", got)
 	}
 }
+
+func TestAdd_KeepsWorldAndPushesNewFacts(t *testing.T) {
+	w := New()
+	w.Load(hiddenUnloadFacts())
+	now := t0.Add(6 * time.Hour)
+	w.Due(now) // everything so far is sent
+	created, _ := json.Marshal(contract.CreatedPayload{DestinationID: "branch-lviv-5"})
+	w.Add([]Fact{{Event: contract.Event{EventID: "n1", Kind: contract.KindCreated, TTN: contract.TTN(2), OccurredAt: now, Payload: created}}})
+	if got := w.Due(now); len(got) != 1 || got[0].EventID != "n1" {
+		t.Fatalf("%+v", got)
+	}
+	if _, ok := w.Track(contract.TTN(1), now); !ok {
+		t.Fatal("old world lost")
+	}
+	if st, ok := w.Track(contract.TTN(2), now); !ok || st.CityRecipient != "Львів" {
+		t.Fatalf("new parcel not tracked: %+v", st)
+	}
+}
